@@ -8,6 +8,7 @@ import {
 	createMockInputs,
 	mockUser,
 	mockChat,
+	mockChatWithDiff,
 	mockChatMessageResponse,
 } from "./test-helpers";
 
@@ -213,6 +214,9 @@ describe("CoderAgentChatAction", () => {
 		const parsedResult = ActionOutputsSchema.parse(result);
 		expect(parsedResult.coderUsername).toBe(mockUser.username);
 		expect(parsedResult.chatCreated).toBe(true);
+		expect(parsedResult.chatStatus).toBe("running");
+		expect(parsedResult.chatTitle).toBe("Test chat");
+		expect(parsedResult.workspaceId).toBe(mockChat.workspace_id ?? undefined);
 		expect(parsedResult.chatUrl).toMatch(
 			/^https:\/\/coder\.test\/chats\/[a-f0-9-]+$/,
 		);
@@ -246,6 +250,7 @@ describe("CoderAgentChatAction", () => {
 		coderClient.mockCreateChatMessage.mockResolvedValue(
 			mockChatMessageResponse,
 		);
+		coderClient.mockGetChat.mockResolvedValue(mockChat);
 
 		const existingChatId = "990e8400-e29b-41d4-a716-446655440000";
 		const inputs = createMockInputs({
@@ -268,10 +273,14 @@ describe("CoderAgentChatAction", () => {
 			},
 		);
 		expect(coderClient.mockCreateChat).not.toHaveBeenCalled();
+		// Should fetch full chat state after sending message.
+		expect(coderClient.mockGetChat).toHaveBeenCalledWith(existingChatId);
 
 		const parsedResult = ActionOutputsSchema.parse(result);
 		expect(parsedResult.chatCreated).toBe(false);
 		expect(parsedResult.chatId).toBe(existingChatId);
+		expect(parsedResult.chatStatus).toBe("running");
+		expect(parsedResult.chatTitle).toBe("Test chat");
 	});
 
 	test("creates chat with workspace-id", async () => {
@@ -345,6 +354,34 @@ describe("CoderAgentChatAction", () => {
 			expect(octokit.rest.issues.listComments).toHaveBeenCalled();
 			expect(octokit.rest.issues.createComment).toHaveBeenCalled();
 		});
+	});
+
+	test("surfaces diff/PR metadata in outputs", async () => {
+		coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
+		coderClient.mockCreateChat.mockResolvedValue(mockChatWithDiff);
+
+		const inputs = createMockInputs({ githubUserID: 12345 });
+		const action = new CoderAgentChatAction(
+			coderClient,
+			octokit as unknown as Octokit,
+			inputs,
+		);
+
+		const result = await action.run();
+
+		const parsedResult = ActionOutputsSchema.parse(result);
+		expect(parsedResult.chatStatus).toBe("completed");
+		expect(parsedResult.pullRequestUrl).toBe(
+			"https://github.com/test-org/test-repo/pull/42",
+		);
+		expect(parsedResult.pullRequestState).toBe("open");
+		expect(parsedResult.pullRequestTitle).toBe("Fix issue #123");
+		expect(parsedResult.pullRequestNumber).toBe(42);
+		expect(parsedResult.additions).toBe(50);
+		expect(parsedResult.deletions).toBe(10);
+		expect(parsedResult.changedFiles).toBe(3);
+		expect(parsedResult.headBranch).toBe("fix/issue-123");
+		expect(parsedResult.baseBranch).toBe("main");
 	});
 
 	describe("Error Scenarios", () => {

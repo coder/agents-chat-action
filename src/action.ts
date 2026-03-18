@@ -1,5 +1,10 @@
 import * as core from "@actions/core";
-import type { CreateChatRequest, CoderClient, ChatId } from "./coder-client";
+import type {
+	CreateChatRequest,
+	CoderClient,
+	CoderChat,
+	ChatId,
+} from "./coder-client";
 import type { ActionInputs, ActionOutputs } from "./schemas";
 import type { getOctokit } from "@actions/github";
 
@@ -90,6 +95,36 @@ export class CoderAgentChatAction {
 	}
 
 	/**
+	 * Build a rich ActionOutputs from a Chat response.
+	 */
+	buildOutputs(
+		coderUsername: string,
+		chat: CoderChat,
+		chatCreated: boolean,
+	): ActionOutputs {
+		const diff = chat.diff_status;
+		return {
+			coderUsername,
+			chatId: chat.id,
+			chatUrl: this.generateChatUrl(chat.id),
+			chatCreated,
+			chatStatus: chat.status,
+			chatTitle: chat.title,
+			workspaceId: chat.workspace_id ?? undefined,
+			// Diff / PR metadata
+			pullRequestUrl: diff?.url ?? undefined,
+			pullRequestState: diff?.pull_request_state ?? undefined,
+			pullRequestTitle: diff?.pull_request_title || undefined,
+			pullRequestNumber: diff?.pr_number ?? undefined,
+			additions: diff?.additions,
+			deletions: diff?.deletions,
+			changedFiles: diff?.changed_files,
+			headBranch: diff?.head_branch ?? undefined,
+			baseBranch: diff?.base_branch ?? undefined,
+		};
+	}
+
+	/**
 	 * Main action execution
 	 */
 	async run(): Promise<ActionOutputs> {
@@ -114,7 +149,8 @@ export class CoderAgentChatAction {
 		core.info(`GitHub issue number: ${githubIssueNumber}`);
 		core.info(`Coder username: ${coderUsername}`);
 
-		// If an existing chat ID is provided, send a message to it
+		// If an existing chat ID is provided, send a message then fetch
+		// the full chat state so outputs are always rich.
 		if (this.inputs.existingChatId) {
 			core.info(
 				`Sending message to existing chat: ${this.inputs.existingChatId}`,
@@ -127,8 +163,11 @@ export class CoderAgentChatAction {
 			});
 			core.info("Message sent successfully");
 
-			const chatUrl = this.generateChatUrl(chatId);
+			// Fetch full chat so we surface status, title, diff info.
+			const chat = await this.coder.getChat(chatId);
+			core.info(`Chat status: ${chat.status}, title: ${chat.title}`);
 
+			const chatUrl = this.generateChatUrl(chatId);
 			if (this.inputs.commentOnIssue) {
 				core.info(
 					`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`,
@@ -141,12 +180,7 @@ export class CoderAgentChatAction {
 				);
 			}
 
-			return {
-				coderUsername,
-				chatId: this.inputs.existingChatId,
-				chatUrl,
-				chatCreated: false,
-			};
+			return this.buildOutputs(coderUsername, chat, false);
 		}
 
 		// Create a new chat
@@ -180,11 +214,6 @@ export class CoderAgentChatAction {
 			core.info("Skipping comment on issue (commentOnIssue is false)");
 		}
 
-		return {
-			coderUsername,
-			chatId: createdChat.id,
-			chatUrl,
-			chatCreated: true,
-		};
+		return this.buildOutputs(coderUsername, createdChat, true);
 	}
 }

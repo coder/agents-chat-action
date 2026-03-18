@@ -44,6 +44,43 @@ async function main() {
 		core.setOutput("chat-id", outputs.chatId);
 		core.setOutput("chat-url", outputs.chatUrl);
 		core.setOutput("chat-created", outputs.chatCreated.toString());
+		core.setOutput("chat-status", outputs.chatStatus);
+		core.setOutput("chat-title", outputs.chatTitle);
+		if (outputs.workspaceId) {
+			core.setOutput("workspace-id", outputs.workspaceId);
+		}
+		// Diff / PR outputs — only set when present so downstream
+		// steps can test with a simple `if:` guard.
+		if (outputs.pullRequestUrl) {
+			core.setOutput("pull-request-url", outputs.pullRequestUrl);
+		}
+		if (outputs.pullRequestState) {
+			core.setOutput("pull-request-state", outputs.pullRequestState);
+		}
+		if (outputs.pullRequestTitle) {
+			core.setOutput("pull-request-title", outputs.pullRequestTitle);
+		}
+		if (outputs.pullRequestNumber !== undefined) {
+			core.setOutput(
+				"pull-request-number",
+				outputs.pullRequestNumber.toString(),
+			);
+		}
+		if (outputs.additions !== undefined) {
+			core.setOutput("additions", outputs.additions.toString());
+		}
+		if (outputs.deletions !== undefined) {
+			core.setOutput("deletions", outputs.deletions.toString());
+		}
+		if (outputs.changedFiles !== undefined) {
+			core.setOutput("changed-files", outputs.changedFiles.toString());
+		}
+		if (outputs.headBranch) {
+			core.setOutput("head-branch", outputs.headBranch);
+		}
+		if (outputs.baseBranch) {
+			core.setOutput("base-branch", outputs.baseBranch);
+		}
 
 		core.debug("Action completed successfully");
 		core.debug(`Outputs: ${JSON.stringify(outputs, null, 2)}`);

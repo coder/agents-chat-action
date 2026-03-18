@@ -22769,6 +22769,27 @@ class CoderAgentChatAction {
       core.error(`Failed to comment on issue: ${error2}`);
     }
   }
+  buildOutputs(coderUsername, chat, chatCreated) {
+    const diff = chat.diff_status;
+    return {
+      coderUsername,
+      chatId: chat.id,
+      chatUrl: this.generateChatUrl(chat.id),
+      chatCreated,
+      chatStatus: chat.status,
+      chatTitle: chat.title,
+      workspaceId: chat.workspace_id ?? undefined,
+      pullRequestUrl: diff?.url ?? undefined,
+      pullRequestState: diff?.pull_request_state ?? undefined,
+      pullRequestTitle: diff?.pull_request_title || undefined,
+      pullRequestNumber: diff?.pr_number ?? undefined,
+      additions: diff?.additions,
+      deletions: diff?.deletions,
+      changedFiles: diff?.changed_files,
+      headBranch: diff?.head_branch ?? undefined,
+      baseBranch: diff?.base_branch ?? undefined
+    };
+  }
   async run() {
     let coderUsername;
     if (this.inputs.coderUsername) {
@@ -22792,17 +22813,14 @@ class CoderAgentChatAction {
         model_config_id: this.inputs.modelConfigId
       });
       core.info("Message sent successfully");
+      const chat = await this.coder.getChat(chatId);
+      core.info(`Chat status: ${chat.status}, title: ${chat.title}`);
       const chatUrl2 = this.generateChatUrl(chatId);
       if (this.inputs.commentOnIssue) {
         core.info(`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`);
         await this.commentOnIssue(chatUrl2, githubOrg, githubRepo, githubIssueNumber);
       }
-      return {
-        coderUsername,
-        chatId: this.inputs.existingChatId,
-        chatUrl: chatUrl2,
-        chatCreated: false
-      };
+      return this.buildOutputs(coderUsername, chat, false);
     }
     core.info("Creating new agent chat...");
     const req = {
@@ -22821,12 +22839,7 @@ class CoderAgentChatAction {
     } else {
       core.info("Skipping comment on issue (commentOnIssue is false)");
     }
-    return {
-      coderUsername,
-      chatId: createdChat.id,
-      chatUrl,
-      chatCreated: true
-    };
+    return this.buildOutputs(coderUsername, createdChat, true);
   }
 }
 
@@ -26894,14 +26907,41 @@ var ChatStatusSchema = exports_external.enum([
   "completed",
   "error"
 ]);
+var ChatDiffStatusSchema = exports_external.object({
+  chat_id: exports_external.string().uuid(),
+  url: exports_external.string().nullable().optional(),
+  pull_request_state: exports_external.string().nullable().optional(),
+  pull_request_title: exports_external.string().default(""),
+  pull_request_draft: exports_external.boolean().default(false),
+  changes_requested: exports_external.boolean().default(false),
+  additions: exports_external.number().default(0),
+  deletions: exports_external.number().default(0),
+  changed_files: exports_external.number().default(0),
+  author_login: exports_external.string().nullable().optional(),
+  author_avatar_url: exports_external.string().nullable().optional(),
+  base_branch: exports_external.string().nullable().optional(),
+  head_branch: exports_external.string().nullable().optional(),
+  pr_number: exports_external.number().nullable().optional(),
+  commits: exports_external.number().nullable().optional(),
+  approved: exports_external.boolean().nullable().optional(),
+  reviewer_count: exports_external.number().nullable().optional(),
+  refreshed_at: exports_external.string().nullable().optional(),
+  stale_at: exports_external.string().nullable().optional()
+});
 var CoderChatSchema = exports_external.object({
   id: ChatIdSchema,
   owner_id: exports_external.string().uuid(),
   workspace_id: exports_external.string().uuid().nullable().optional(),
+  parent_chat_id: exports_external.string().uuid().nullable().optional(),
+  root_chat_id: exports_external.string().uuid().nullable().optional(),
+  last_model_config_id: exports_external.string().uuid().optional(),
   title: exports_external.string(),
   status: ChatStatusSchema,
+  last_error: exports_external.string().nullable().optional(),
+  diff_status: ChatDiffStatusSchema.nullable().optional(),
   created_at: exports_external.string(),
-  updated_at: exports_external.string()
+  updated_at: exports_external.string(),
+  archived: exports_external.boolean().optional()
 });
 var CoderChatListResponseSchema = exports_external.array(CoderChatSchema);
 var ChatInputPartSchema = exports_external.object({
@@ -26961,7 +27001,19 @@ var ActionOutputsSchema = exports_external.object({
   coderUsername: exports_external.string(),
   chatId: exports_external.string().uuid(),
   chatUrl: exports_external.string().url(),
-  chatCreated: exports_external.boolean()
+  chatCreated: exports_external.boolean(),
+  chatStatus: exports_external.string(),
+  chatTitle: exports_external.string(),
+  workspaceId: exports_external.string().uuid().optional(),
+  pullRequestUrl: exports_external.string().optional(),
+  pullRequestState: exports_external.string().optional(),
+  pullRequestTitle: exports_external.string().optional(),
+  pullRequestNumber: exports_external.number().optional(),
+  additions: exports_external.number().optional(),
+  deletions: exports_external.number().optional(),
+  changedFiles: exports_external.number().optional(),
+  headBranch: exports_external.string().optional(),
+  baseBranch: exports_external.string().optional()
 });
 
 // src/index.ts
@@ -26997,6 +27049,38 @@ async function main() {
     core2.setOutput("chat-id", outputs.chatId);
     core2.setOutput("chat-url", outputs.chatUrl);
     core2.setOutput("chat-created", outputs.chatCreated.toString());
+    core2.setOutput("chat-status", outputs.chatStatus);
+    core2.setOutput("chat-title", outputs.chatTitle);
+    if (outputs.workspaceId) {
+      core2.setOutput("workspace-id", outputs.workspaceId);
+    }
+    if (outputs.pullRequestUrl) {
+      core2.setOutput("pull-request-url", outputs.pullRequestUrl);
+    }
+    if (outputs.pullRequestState) {
+      core2.setOutput("pull-request-state", outputs.pullRequestState);
+    }
+    if (outputs.pullRequestTitle) {
+      core2.setOutput("pull-request-title", outputs.pullRequestTitle);
+    }
+    if (outputs.pullRequestNumber !== undefined) {
+      core2.setOutput("pull-request-number", outputs.pullRequestNumber.toString());
+    }
+    if (outputs.additions !== undefined) {
+      core2.setOutput("additions", outputs.additions.toString());
+    }
+    if (outputs.deletions !== undefined) {
+      core2.setOutput("deletions", outputs.deletions.toString());
+    }
+    if (outputs.changedFiles !== undefined) {
+      core2.setOutput("changed-files", outputs.changedFiles.toString());
+    }
+    if (outputs.headBranch) {
+      core2.setOutput("head-branch", outputs.headBranch);
+    }
+    if (outputs.baseBranch) {
+      core2.setOutput("base-branch", outputs.baseBranch);
+    }
     core2.debug("Action completed successfully");
     core2.debug(`Outputs: ${JSON.stringify(outputs, null, 2)}`);
   } catch (error2) {

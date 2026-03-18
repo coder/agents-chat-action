@@ -64,13 +64,49 @@ outputs:
     description: "The Coder username resolved from GitHub user"
 
   chat-id:
-    description: "The chat ID"
+    description: "The chat ID (UUID)"
 
   chat-url:
     description: "The URL to view the chat in Coder"
 
   chat-created:
     description: "Whether the chat was newly created (true) or a message was sent to an existing chat (false)"
+
+  chat-status:
+    description: "Current chat status (waiting, pending, running, paused, completed, error)"
+
+  chat-title:
+    description: "The auto-generated chat title"
+
+  workspace-id:
+    description: "The workspace ID the chat is running in (auto-provisioned or provided)"
+
+  pull-request-url:
+    description: "URL of the pull request or branch page, if the chat has tracked changes"
+
+  pull-request-state:
+    description: "PR state (open, closed, merged) when available"
+
+  pull-request-title:
+    description: "Title of the pull request when available"
+
+  pull-request-number:
+    description: "PR number when available"
+
+  additions:
+    description: "Number of lines added in tracked changes"
+
+  deletions:
+    description: "Number of lines deleted in tracked changes"
+
+  changed-files:
+    description: "Number of files changed in tracked changes"
+
+  head-branch:
+    description: "Head branch name when available"
+
+  base-branch:
+    description: "Base branch name when available"
 
 runs:
   using: "node20"

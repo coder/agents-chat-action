@@ -35,6 +35,19 @@ export const ActionOutputsSchema = z.object({
 	chatId: z.string().uuid(),
 	chatUrl: z.string().url(),
 	chatCreated: z.boolean(),
+	chatStatus: z.string(),
+	chatTitle: z.string(),
+	workspaceId: z.string().uuid().optional(),
+	// Diff/PR metadata — populated when the chat has tracked changes.
+	pullRequestUrl: z.string().optional(),
+	pullRequestState: z.string().optional(),
+	pullRequestTitle: z.string().optional(),
+	pullRequestNumber: z.number().optional(),
+	additions: z.number().optional(),
+	deletions: z.number().optional(),
+	changedFiles: z.number().optional(),
+	headBranch: z.string().optional(),
+	baseBranch: z.string().optional(),
 });
 
 export type ActionOutputs = z.infer<typeof ActionOutputsSchema>;
