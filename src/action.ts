@@ -57,17 +57,21 @@ export class CoderAgentChatAction {
 		const body = `Agent chat created: ${chatUrl}`;
 
 		try {
+			// Fetch the most recent comments first so we find the latest
+			// matching comment without needing to paginate through all of
+			// them. The default per_page is 30, which is too few for
+			// active issues.
 			const { data: comments } = await this.octokit.rest.issues.listComments({
 				owner,
 				repo,
 				issue_number: issueNumber,
+				per_page: 100,
+				direction: "desc",
 			});
 
-			const existingComment = comments
-				.reverse()
-				.find((comment: { body?: string }) =>
-					comment.body?.startsWith("Agent chat created:"),
-				);
+			const existingComment = comments.find((comment: { body?: string }) =>
+				comment.body?.startsWith("Agent chat created:"),
+			);
 
 			if (existingComment) {
 				await this.octokit.rest.issues.updateComment({

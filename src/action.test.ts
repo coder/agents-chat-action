@@ -134,6 +134,13 @@ describe("CoderAgentChatAction", () => {
 
 			await action.commentOnIssue("chat-url", "owner", "repo", 123);
 
+			expect(octokit.rest.issues.listComments).toHaveBeenCalledWith({
+				owner: "owner",
+				repo: "repo",
+				issue_number: 123,
+				per_page: 100,
+				direction: "desc",
+			});
 			expect(octokit.rest.issues.createComment).toHaveBeenCalledWith({
 				owner: "owner",
 				repo: "repo",
@@ -142,11 +149,14 @@ describe("CoderAgentChatAction", () => {
 			});
 		});
 
-		test("updates existing Agent chat created comment", async () => {
+		test("updates most recent matching comment (desc order)", async () => {
+			// With direction: "desc", the API returns newest first.
+			// The first match is the most recent one.
 			octokit.rest.issues.listComments.mockResolvedValue({
 				data: [
-					{ id: 1, body: "Agent chat created: old-url" },
-					{ id: 2, body: "Other comment" },
+					{ id: 3, body: "Other comment" },
+					{ id: 2, body: "Agent chat created: newer-url" },
+					{ id: 1, body: "Agent chat created: oldest-url" },
 				],
 			} as ReturnType<typeof octokit.rest.issues.listComments>);
 			octokit.rest.issues.updateComment.mockResolvedValue(
@@ -165,8 +175,40 @@ describe("CoderAgentChatAction", () => {
 			expect(octokit.rest.issues.updateComment).toHaveBeenCalledWith({
 				owner: "owner",
 				repo: "repo",
-				comment_id: 1,
+				comment_id: 2,
 				body: "Agent chat created: new-url",
+			});
+		});
+
+		test("creates new comment when match is not in first page", async () => {
+			// Simulate 100 comments with no match. The real matching
+			// comment would be beyond this page, but creating a new
+			// one is acceptable.
+			const comments = Array.from({ length: 100 }, (_, i) => ({
+				id: 100 - i,
+				body: `Unrelated comment ${100 - i}`,
+			}));
+			octokit.rest.issues.listComments.mockResolvedValue({
+				data: comments,
+			} as ReturnType<typeof octokit.rest.issues.listComments>);
+			octokit.rest.issues.createComment.mockResolvedValue(
+				{} as ReturnType<typeof octokit.rest.issues.createComment>,
+			);
+
+			const inputs = createMockInputs();
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+			);
+
+			await action.commentOnIssue("chat-url", "owner", "repo", 123);
+
+			expect(octokit.rest.issues.createComment).toHaveBeenCalledWith({
+				owner: "owner",
+				repo: "repo",
+				issue_number: 123,
+				body: "Agent chat created: chat-url",
 			});
 		});
 
