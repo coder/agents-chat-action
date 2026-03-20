@@ -3,25 +3,43 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 
@@ -3447,7 +3465,7 @@ var require_constants2 = __commonJS((exports2, module2) => {
     }
   })();
   var channel;
-  var structuredClone = globalThis.structuredClone ?? function structuredClone(value, options = undefined) {
+  var structuredClone = globalThis.structuredClone ?? function structuredClone2(value, options = undefined) {
     if (arguments.length === 0) {
       throw new TypeError("missing argument");
     }
@@ -16372,7 +16390,7 @@ var require_undici = __commonJS((exports2, module2) => {
   module2.exports.getGlobalDispatcher = getGlobalDispatcher;
   if (util.nodeMajor > 16 || util.nodeMajor === 16 && util.nodeMinor >= 8) {
     let fetchImpl = null;
-    module2.exports.fetch = async function fetch(resource) {
+    module2.exports.fetch = async function fetch2(resource) {
       if (!fetchImpl) {
         fetchImpl = require_fetch().fetch;
       }
@@ -22708,127 +22726,11 @@ var require_github = __commonJS((exports2) => {
 });
 
 // src/index.ts
-var core2 = __toESM(require_core());
-var github = __toESM(require_github());
+var core2 = __toESM(require_core(), 1);
+var github = __toESM(require_github(), 1);
 
 // src/action.ts
-var core = __toESM(require_core());
-
-class CoderAgentChatAction {
-  coder;
-  octokit;
-  inputs;
-  constructor(coder, octokit, inputs) {
-    this.coder = coder;
-    this.octokit = octokit;
-    this.inputs = inputs;
-  }
-  parseGithubIssueURL() {
-    if (!this.inputs.githubIssueURL) {
-      throw new Error("Missing issue URL");
-    }
-    const match = this.inputs.githubIssueURL.match(/([^/]+)\/([^/]+)\/issues\/(\d+)/);
-    if (!match) {
-      throw new Error(`Invalid issue URL: ${this.inputs.githubIssueURL}`);
-    }
-    return {
-      githubOrg: match[1],
-      githubRepo: match[2],
-      githubIssueNumber: parseInt(match[3], 10)
-    };
-  }
-  generateChatUrl(chatId) {
-    const baseURL = this.inputs.coderURL.split(/[?#]/)[0].replace(/\/$/, "");
-    return `${baseURL}/chats/${chatId}`;
-  }
-  async commentOnIssue(chatUrl, owner, repo, issueNumber) {
-    const body = `Agent chat created: ${chatUrl}`;
-    try {
-      const { data: comments } = await this.octokit.rest.issues.listComments({
-        owner,
-        repo,
-        issue_number: issueNumber
-      });
-      const existingComment = comments.reverse().find((comment) => comment.body?.startsWith("Agent chat created:"));
-      if (existingComment) {
-        await this.octokit.rest.issues.updateComment({
-          owner,
-          repo,
-          comment_id: existingComment.id,
-          body
-        });
-      } else {
-        await this.octokit.rest.issues.createComment({
-          owner,
-          repo,
-          issue_number: issueNumber,
-          body
-        });
-      }
-    } catch (error2) {
-      core.error(`Failed to comment on issue: ${error2}`);
-    }
-  }
-  async run() {
-    let coderUsername;
-    if (this.inputs.coderUsername) {
-      core.info(`Using provided Coder username: ${this.inputs.coderUsername}`);
-      coderUsername = this.inputs.coderUsername;
-    } else {
-      core.info(`Looking up Coder user by GitHub user ID: ${this.inputs.githubUserID}`);
-      const coderUser = await this.coder.getCoderUserByGitHubId(this.inputs.githubUserID);
-      coderUsername = coderUser.username;
-    }
-    const { githubOrg, githubRepo, githubIssueNumber } = this.parseGithubIssueURL();
-    core.info(`GitHub owner: ${githubOrg}`);
-    core.info(`GitHub repo: ${githubRepo}`);
-    core.info(`GitHub issue number: ${githubIssueNumber}`);
-    core.info(`Coder username: ${coderUsername}`);
-    if (this.inputs.existingChatId) {
-      core.info(`Sending message to existing chat: ${this.inputs.existingChatId}`);
-      const chatId = this.inputs.existingChatId;
-      await this.coder.createChatMessage(chatId, {
-        content: [{ type: "text", text: this.inputs.chatPrompt }],
-        model_config_id: this.inputs.modelConfigId
-      });
-      core.info("Message sent successfully");
-      const chatUrl2 = this.generateChatUrl(chatId);
-      if (this.inputs.commentOnIssue) {
-        core.info(`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`);
-        await this.commentOnIssue(chatUrl2, githubOrg, githubRepo, githubIssueNumber);
-      }
-      return {
-        coderUsername,
-        chatId: this.inputs.existingChatId,
-        chatUrl: chatUrl2,
-        chatCreated: false
-      };
-    }
-    core.info("Creating new agent chat...");
-    const req = {
-      content: [{ type: "text", text: this.inputs.chatPrompt }],
-      workspace_id: this.inputs.workspaceId,
-      model_config_id: this.inputs.modelConfigId
-    };
-    const createdChat = await this.coder.createChat(req);
-    core.info(`Agent chat created successfully (id: ${createdChat.id}, status: ${createdChat.status})`);
-    const chatUrl = this.generateChatUrl(createdChat.id);
-    core.info(`Chat URL: ${chatUrl}`);
-    if (this.inputs.commentOnIssue) {
-      core.info(`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`);
-      await this.commentOnIssue(chatUrl, githubOrg, githubRepo, githubIssueNumber);
-      core.info("Comment posted successfully");
-    } else {
-      core.info("Skipping comment on issue (commentOnIssue is false)");
-    }
-    return {
-      coderUsername,
-      chatId: createdChat.id,
-      chatUrl,
-      chatCreated: true
-    };
-  }
-}
+var core = __toESM(require_core(), 1);
 
 // node_modules/zod/v3/external.js
 var exports_external = {};
@@ -23124,8 +23026,8 @@ class ZodError extends Error {
       return issue.message;
     };
     const fieldErrors = { _errors: [] };
-    const processError = (error2) => {
-      for (const issue of error2.issues) {
+    const processError = (error) => {
+      for (const issue of error.issues) {
         if (issue.code === "invalid_union") {
           issue.unionErrors.map(processError);
         } else if (issue.code === "invalid_return_type") {
@@ -23188,8 +23090,8 @@ class ZodError extends Error {
   }
 }
 ZodError.create = (issues) => {
-  const error2 = new ZodError(issues);
-  return error2;
+  const error = new ZodError(issues);
+  return error;
 };
 
 // node_modules/zod/v3/locales/en.js
@@ -23448,8 +23350,8 @@ var handleResult = (ctx, result) => {
       get error() {
         if (this._error)
           return this._error;
-        const error2 = new ZodError(ctx.common.issues);
-        this._error = error2;
+        const error = new ZodError(ctx.common.issues);
+        this._error = error;
         return this._error;
       }
     };
@@ -26031,25 +25933,25 @@ class ZodFunction extends ZodType {
       });
       return INVALID;
     }
-    function makeArgsIssue(args, error2) {
+    function makeArgsIssue(args, error) {
       return makeIssue({
         data: args,
         path: ctx.path,
         errorMaps: [ctx.common.contextualErrorMap, ctx.schemaErrorMap, getErrorMap(), en_default].filter((x) => !!x),
         issueData: {
           code: ZodIssueCode.invalid_arguments,
-          argumentsError: error2
+          argumentsError: error
         }
       });
     }
-    function makeReturnsIssue(returns, error2) {
+    function makeReturnsIssue(returns, error) {
       return makeIssue({
         data: returns,
         path: ctx.path,
         errorMaps: [ctx.common.contextualErrorMap, ctx.schemaErrorMap, getErrorMap(), en_default].filter((x) => !!x),
         issueData: {
           code: ZodIssueCode.invalid_return_type,
-          returnTypeError: error2
+          returnTypeError: error
         }
       });
     }
@@ -26058,15 +25960,15 @@ class ZodFunction extends ZodType {
     if (this._def.returns instanceof ZodPromise) {
       const me = this;
       return OK(async function(...args) {
-        const error2 = new ZodError([]);
+        const error = new ZodError([]);
         const parsedArgs = await me._def.args.parseAsync(args, params).catch((e) => {
-          error2.addIssue(makeArgsIssue(args, e));
-          throw error2;
+          error.addIssue(makeArgsIssue(args, e));
+          throw error;
         });
         const result = await Reflect.apply(fn, this, parsedArgs);
         const parsedReturns = await me._def.returns._def.type.parseAsync(result, params).catch((e) => {
-          error2.addIssue(makeReturnsIssue(result, e));
-          throw error2;
+          error.addIssue(makeReturnsIssue(result, e));
+          throw error;
         });
         return parsedReturns;
       });
@@ -26932,6 +26834,123 @@ class CoderAPIError extends Error {
   }
 }
 
+// src/action.ts
+class CoderAgentChatAction {
+  coder;
+  octokit;
+  inputs;
+  constructor(coder, octokit, inputs) {
+    this.coder = coder;
+    this.octokit = octokit;
+    this.inputs = inputs;
+  }
+  parseGithubIssueURL() {
+    if (!this.inputs.githubIssueURL) {
+      throw new Error("Missing issue URL");
+    }
+    const match = this.inputs.githubIssueURL.match(/\/([^/]+)\/([^/]+)\/issues\/(\d+)\/?$/);
+    if (!match) {
+      throw new Error(`Invalid issue URL: ${this.inputs.githubIssueURL}`);
+    }
+    return {
+      githubOrg: match[1],
+      githubRepo: match[2],
+      githubIssueNumber: parseInt(match[3], 10)
+    };
+  }
+  generateChatUrl(chatId) {
+    const baseURL = this.inputs.coderURL.split(/[?#]/)[0].replace(/\/$/, "");
+    return `${baseURL}/chats/${chatId}`;
+  }
+  async commentOnIssue(chatUrl, owner, repo, issueNumber) {
+    const body = `Agent chat created: ${chatUrl}`;
+    try {
+      const { data: comments } = await this.octokit.rest.issues.listComments({
+        owner,
+        repo,
+        issue_number: issueNumber
+      });
+      const existingComment = comments.reverse().find((comment) => comment.body?.startsWith("Agent chat created:"));
+      if (existingComment) {
+        await this.octokit.rest.issues.updateComment({
+          owner,
+          repo,
+          comment_id: existingComment.id,
+          body
+        });
+      } else {
+        await this.octokit.rest.issues.createComment({
+          owner,
+          repo,
+          issue_number: issueNumber,
+          body
+        });
+      }
+    } catch (error2) {
+      core.error(`Failed to comment on issue: ${error2}`);
+    }
+  }
+  async run() {
+    let coderUsername;
+    if (this.inputs.coderUsername) {
+      core.info(`Using provided Coder username: ${this.inputs.coderUsername}`);
+      coderUsername = this.inputs.coderUsername;
+    } else {
+      core.info(`Looking up Coder user by GitHub user ID: ${this.inputs.githubUserID}`);
+      const coderUser = await this.coder.getCoderUserByGitHubId(this.inputs.githubUserID);
+      coderUsername = coderUser.username;
+    }
+    const { githubOrg, githubRepo, githubIssueNumber } = this.parseGithubIssueURL();
+    core.info(`GitHub owner: ${githubOrg}`);
+    core.info(`GitHub repo: ${githubRepo}`);
+    core.info(`GitHub issue number: ${githubIssueNumber}`);
+    core.info(`Coder username: ${coderUsername}`);
+    if (this.inputs.existingChatId) {
+      core.info(`Sending message to existing chat: ${this.inputs.existingChatId}`);
+      const chatId = ChatIdSchema.parse(this.inputs.existingChatId);
+      await this.coder.createChatMessage(chatId, {
+        content: [{ type: "text", text: this.inputs.chatPrompt }],
+        model_config_id: this.inputs.modelConfigId
+      });
+      core.info("Message sent successfully");
+      const chatUrl2 = this.generateChatUrl(chatId);
+      if (this.inputs.commentOnIssue) {
+        core.info(`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`);
+        await this.commentOnIssue(chatUrl2, githubOrg, githubRepo, githubIssueNumber);
+      }
+      return {
+        coderUsername,
+        chatId: this.inputs.existingChatId,
+        chatUrl: chatUrl2,
+        chatCreated: false
+      };
+    }
+    core.info("Creating new agent chat...");
+    const req = {
+      content: [{ type: "text", text: this.inputs.chatPrompt }],
+      workspace_id: this.inputs.workspaceId,
+      model_config_id: this.inputs.modelConfigId
+    };
+    const createdChat = await this.coder.createChat(req);
+    core.info(`Agent chat created successfully (id: ${createdChat.id}, status: ${createdChat.status})`);
+    const chatUrl = this.generateChatUrl(createdChat.id);
+    core.info(`Chat URL: ${chatUrl}`);
+    if (this.inputs.commentOnIssue) {
+      core.info(`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`);
+      await this.commentOnIssue(chatUrl, githubOrg, githubRepo, githubIssueNumber);
+      core.info("Comment posted successfully");
+    } else {
+      core.info("Skipping comment on issue (commentOnIssue is false)");
+    }
+    return {
+      coderUsername,
+      chatId: createdChat.id,
+      chatUrl,
+      chatCreated: true
+    };
+  }
+}
+
 // src/schemas.ts
 var BaseInputsSchema = exports_external.object({
   chatPrompt: exports_external.string().min(1),
@@ -27010,7 +27029,6 @@ async function main() {
       core2.setFailed("Unknown error occurred");
       console.error("Unknown error:", error2);
     }
-    process.exit(1);
   }
 }
 main();
