@@ -67,12 +67,9 @@ describe("CoderClient", () => {
 		});
 
 		test("throws when GitHub user ID is 0", async () => {
-			await expect(client.getCoderUserByGitHubId(0)).rejects.toThrow(
-				"GitHub user ID cannot be 0",
-			);
-			await expect(client.getCoderUserByGitHubId(0)).rejects.toThrow(
-				CoderAPIError,
-			);
+			const promise = client.getCoderUserByGitHubId(0);
+			await expect(promise).rejects.toThrow("GitHub user ID cannot be 0");
+			await expect(promise).rejects.toThrow(CoderAPIError);
 		});
 	});
 
