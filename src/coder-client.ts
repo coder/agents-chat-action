@@ -69,7 +69,7 @@ export class RealCoderClient implements CoderClient {
 			throw "GitHub user ID cannot be 0";
 		}
 		const endpoint = `/api/v2/users?q=${encodeURIComponent(`github_com_user_id:${githubUserId}`)}`;
-		const response = await this.request<unknown[]>(endpoint);
+		const response = await this.request<unknown>(endpoint);
 		const userList = CoderSDKGetUsersResponseSchema.parse(response);
 		if (userList.users.length === 0) {
 			throw new CoderAPIError(
