@@ -194,9 +194,18 @@ export class CoderAgentChatAction {
 
 			// Fetch the full chat after the message so the action surfaces a
 			// consistent output shape regardless of which path created or
-			// continued the chat.
-			const chat = await this.coder.getChat(chatId);
-			core.info(`Chat status: ${chat.status}, title: ${chat.title}`);
+			// continued the chat. If the fetch fails, fall back to a minimal
+			// output rather than failing the whole step, since the follow-up
+			// message has already been sent successfully.
+			let chat: CoderChat | undefined;
+			try {
+				chat = await this.coder.getChat(chatId);
+				core.info(`Chat status: ${chat.status}, title: ${chat.title}`);
+			} catch (error) {
+				core.warning(
+					`Failed to fetch chat after sending message; outputs will be minimal: ${error}`,
+				);
+			}
 
 			const chatUrl = this.generateChatUrl(chatId);
 
@@ -212,7 +221,15 @@ export class CoderAgentChatAction {
 				);
 			}
 
-			return this.buildOutputs(coderUsername, chat, false);
+			if (chat) {
+				return this.buildOutputs(coderUsername, chat, false);
+			}
+			return {
+				coderUsername,
+				chatId,
+				chatUrl,
+				chatCreated: false,
+			};
 		}
 
 		// Create a new chat

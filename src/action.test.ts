@@ -395,6 +395,40 @@ describe("CoderAgentChatAction", () => {
 		expect(parsedResult.workspaceId).toBe(mockChat.workspace_id ?? undefined);
 	});
 
+	test("falls back to minimal outputs when getChat fails after follow-up", async () => {
+		coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
+		coderClient.mockCreateChatMessage.mockResolvedValue(
+			mockChatMessageResponse,
+		);
+		coderClient.mockGetChat.mockRejectedValue(new Error("transient API error"));
+
+		const existingChatId = "990e8400-e29b-41d4-a716-446655440000";
+		const inputs = createMockInputs({
+			githubUserID: 12345,
+			existingChatId,
+			commentOnIssue: false,
+		});
+		const action = new CoderAgentChatAction(
+			coderClient,
+			octokit as unknown as Octokit,
+			inputs,
+		);
+
+		// The follow-up message succeeded, so the action should not fail red
+		// just because the chat fetch did. The outputs degrade gracefully.
+		const result = await action.run();
+
+		expect(coderClient.mockCreateChatMessage).toHaveBeenCalled();
+		expect(coderClient.mockGetChat).toHaveBeenCalledWith(existingChatId);
+
+		const parsedResult = ActionOutputsSchema.parse(result);
+		expect(parsedResult.chatCreated).toBe(false);
+		expect(parsedResult.chatId).toBe(existingChatId);
+		expect(parsedResult.chatStatus).toBeUndefined();
+		expect(parsedResult.chatTitle).toBeUndefined();
+		expect(parsedResult.workspaceId).toBeUndefined();
+	});
+
 	test("creates chat with workspace-id", async () => {
 		coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
 		coderClient.mockCreateChat.mockResolvedValue(mockChat);
