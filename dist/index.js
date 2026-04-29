@@ -22863,14 +22863,27 @@ class CoderAgentChatAction {
         model_config_id: this.inputs.modelConfigId
       });
       core.info("Message sent successfully");
-      const chat = await this.coder.getChat(chatId);
-      core.info(`Chat status: ${chat.status}, title: ${chat.title}`);
+      let chat;
+      try {
+        chat = await this.coder.getChat(chatId);
+        core.info(`Chat status: ${chat.status}, title: ${chat.title}`);
+      } catch (error2) {
+        core.warning(`Failed to fetch chat after sending message; outputs will be minimal: ${error2}`);
+      }
       const chatUrl2 = this.generateChatUrl(chatId);
       if (this.inputs.commentOnIssue) {
         core.info(`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`);
         await this.commentOnIssue(chatUrl2, githubOrg, githubRepo, githubIssueNumber);
       }
-      return this.buildOutputs(coderUsername, chat, false);
+      if (chat) {
+        return this.buildOutputs(coderUsername, chat, false);
+      }
+      return {
+        coderUsername,
+        chatId,
+        chatUrl: chatUrl2,
+        chatCreated: false
+      };
     }
     core.info("Creating new agent chat...");
     const req = {
