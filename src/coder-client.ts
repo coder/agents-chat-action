@@ -68,22 +68,34 @@ export class RealCoderClient implements CoderClient {
 		if (githubUserId === 0) {
 			throw "GitHub user ID cannot be 0";
 		}
-		const endpoint = `/api/v2/users?q=${encodeURIComponent(`github_com_user_id:${githubUserId}`)}`;
+		// Filter rule: send `github_com_user_id:<id> status:active` and apply
+		// the same filter client-side as defense in depth. coderd's GetUsers
+		// already drops `deleted = true` rows server-side, but soft-deleted
+		// users that retain a `github_com_user_id` (create-task-action#8) have
+		// historically slipped through, so we also reject any row tagged
+		// `deleted: true` after parsing the response.
+		const filter = `github_com_user_id:${githubUserId} status:active`;
+		const endpoint = `/api/v2/users?q=${encodeURIComponent(filter)}`;
 		const response = await this.request<unknown[]>(endpoint);
 		const userList = CoderSDKGetUsersResponseSchema.parse(response);
-		if (userList.users.length === 0) {
+		const liveUsers = userList.users.filter((u) => u.deleted !== true);
+		if (liveUsers.length === 0) {
 			throw new CoderAPIError(
 				`No Coder user found with GitHub user ID ${githubUserId}`,
 				404,
+				undefined,
+				"user_not_found",
 			);
 		}
-		if (userList.users.length > 1) {
+		if (liveUsers.length > 1) {
 			throw new CoderAPIError(
 				`Multiple Coder users found with GitHub user ID ${githubUserId}`,
 				409,
+				undefined,
+				"user_ambiguous",
 			);
 		}
-		return CoderSDKUserSchema.parse(userList.users[0]);
+		return CoderSDKUserSchema.parse(liveUsers[0]);
 	}
 
 	async createChat(params: CreateChatRequest): Promise<CoderChat> {
@@ -125,13 +137,17 @@ export class RealCoderClient implements CoderClient {
 export const ChatIdSchema = z.string().uuid().brand("ChatId");
 export type ChatId = z.infer<typeof ChatIdSchema>;
 
-// User schemas (same as create-task-action)
+// User schemas (same as create-task-action). `deleted` is parsed leniently
+// because the public Coder API does not always include it in the JSON
+// response; when present it is the soft-delete flag we use to filter rows
+// out of the GitHub-id lookup.
 export const CoderSDKUserSchema = z.object({
 	id: z.string().uuid(),
 	username: z.string(),
 	email: z.string().email(),
 	organization_ids: z.array(z.string().uuid()),
 	github_com_user_id: z.number().optional(),
+	deleted: z.boolean().optional(),
 });
 export type CoderSDKUser = z.infer<typeof CoderSDKUserSchema>;
 
@@ -230,12 +246,25 @@ export type CreateChatMessageResponse = z.infer<
 	typeof CreateChatMessageResponseSchema
 >;
 
+// ChatErrorKind values mirror the `chat-error-kind` action output enum
+// established in S1 and the failure-comment slice (S5). Only the values
+// that this client raises are listed here; the action layer adds others
+// when it maps API responses to outputs.
+export type ChatErrorKind =
+	| "user_not_found"
+	| "user_ambiguous"
+	| "org_not_found"
+	| "spend_exceeded"
+	| "api_error"
+	| "timeout";
+
 // CoderAPIError
 export class CoderAPIError extends Error {
 	constructor(
 		message: string,
 		public readonly statusCode: number,
 		public readonly response?: unknown,
+		public readonly kind?: ChatErrorKind,
 	) {
 		super(message);
 		this.name = "CoderAPIError";

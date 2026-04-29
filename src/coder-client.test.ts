@@ -29,7 +29,11 @@ describe("CoderClient", () => {
 				mockUser.github_com_user_id,
 			);
 			expect(mockFetch).toHaveBeenCalledWith(
-				`https://coder.test/api/v2/users?q=github_com_user_id%3A${mockUser.github_com_user_id?.toString()}`,
+				expect.stringMatching(
+					new RegExp(
+						`^https://coder\\.test/api/v2/users\\?q=.*github_com_user_id%3A${mockUser.github_com_user_id}.*$`,
+					),
+				),
 				expect.objectContaining({
 					headers: expect.objectContaining({
 						"Coder-Session-Token": "test-token",
@@ -59,7 +63,9 @@ describe("CoderClient", () => {
 			await client.getCoderUserByGitHubId(mockUser.github_com_user_id ?? 0);
 			const calledUrl = mockFetch.mock.calls[0]?.[0] as string;
 			const rawQuery = decodeURIComponent(calledUrl.split("?q=")[1] ?? "");
-			expect(rawQuery).toContain(`github_com_user_id:${mockUser.github_com_user_id}`);
+			expect(rawQuery).toContain(
+				`github_com_user_id:${mockUser.github_com_user_id}`,
+			);
 			expect(rawQuery).toContain("status:active");
 		});
 
