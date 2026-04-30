@@ -120,5 +120,5 @@ jobs:
 | changed-files       | Number of files changed in tracked changes.                                                                                                              |
 | head-branch         | Head branch name when available.                                                                                                                         |
 | base-branch         | Base branch name when available.                                                                                                                         |
-| chat-error-kind     | Machine-readable error kind when the chat fails (e.g. spend_exceeded, user_not_found, user_ambiguous, org_not_found, api_error, timeout).                |
+| chat-error-kind     | Machine-readable error kind when the chat fails. Reserved; not yet populated.                                                                           |
 | chat-error-message  | Human-readable error message when the chat fails.                                                                                                        |

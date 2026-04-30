@@ -158,7 +158,7 @@ export const ChatDiffStatusSchema = z.object({
 	chat_id: z.string().uuid(),
 	url: z.string().nullable().optional(),
 	pull_request_state: z.string().nullable().optional(),
-	pull_request_title: z.string().nullable().default(""),
+	pull_request_title: z.string().nullable().optional(),
 	pull_request_draft: z.boolean().default(false),
 	changes_requested: z.boolean().default(false),
 	additions: z.number().default(0),
@@ -184,14 +184,14 @@ export const CoderChatSchema = z.object({
 	workspace_id: z.string().uuid().nullable().optional(),
 	parent_chat_id: z.string().uuid().nullable().optional(),
 	root_chat_id: z.string().uuid().nullable().optional(),
-	last_model_config_id: z.string().uuid().optional(),
+	last_model_config_id: z.string().uuid().nullable().optional(),
 	title: z.string(),
 	status: ChatStatusSchema,
 	last_error: z.string().nullable().optional(),
 	diff_status: ChatDiffStatusSchema.nullable().optional(),
 	created_at: z.string(),
 	updated_at: z.string(),
-	archived: z.boolean().optional(),
+	archived: z.boolean().nullable().optional(),
 });
 export type CoderChat = z.infer<typeof CoderChatSchema>;
 

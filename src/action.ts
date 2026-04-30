@@ -132,15 +132,12 @@ export class CoderAgentChatAction {
 		chatCreated: boolean,
 	): ActionOutputs {
 		const diff = chat.diff_status;
-		// Three nullish-handling patterns appear below, matched to the
-		// underlying Zod schema:
+		// Two nullish-handling patterns:
 		//   `?? undefined` for `.nullable().optional()` fields.
-		//   `|| undefined` for `.nullable().default("")` (collapses "" to
-		//     undefined so the output is unset, not blank).
-		//   gated `hasPR ? ... : undefined` for `.default(0)` numerics, so a
-		//     chat with diff_status but no PR yet does not emit a misleading
-		//     truthy "0".
-		const hasPR = !!(diff && (diff.url || diff.pr_number != null));
+		//   gated `hasPR ? ... : undefined` for `.default(0)` numerics, so
+		//     a chat with diff_status but no PR yet does not emit a
+		//     misleading truthy "0".
+		const hasPR = diff?.pr_number != null;
 		return {
 			coderUsername,
 			chatId: chat.id,
@@ -151,7 +148,7 @@ export class CoderAgentChatAction {
 			workspaceId: chat.workspace_id ?? undefined,
 			pullRequestUrl: diff?.url ?? undefined,
 			pullRequestState: diff?.pull_request_state ?? undefined,
-			pullRequestTitle: diff?.pull_request_title || undefined,
+			pullRequestTitle: diff?.pull_request_title ?? undefined,
 			pullRequestNumber: diff?.pr_number ?? undefined,
 			additions: hasPR ? diff?.additions : undefined,
 			deletions: hasPR ? diff?.deletions : undefined,

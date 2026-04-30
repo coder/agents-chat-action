@@ -193,17 +193,25 @@ describe("CoderAgentChatAction", () => {
 			octokit.rest.issues.listComments.mockRejectedValue(
 				new Error("API Error"),
 			);
+			const errorLog = spyOn(core, "error").mockImplementation(() => {});
 
-			const inputs = createMockInputs();
-			const action = new CoderAgentChatAction(
-				coderClient,
-				octokit as unknown as Octokit,
-				inputs,
-			);
+			try {
+				const inputs = createMockInputs();
+				const action = new CoderAgentChatAction(
+					coderClient,
+					octokit as unknown as Octokit,
+					inputs,
+				);
 
-			await expect(
-				action.commentOnIssue("url", "owner", "repo", 123),
-			).resolves.toBeUndefined();
+				await expect(
+					action.commentOnIssue("url", "owner", "repo", 123),
+				).resolves.toBeUndefined();
+				expect(errorLog).toHaveBeenCalledWith(
+					expect.stringContaining("Failed to post comment"),
+				);
+			} finally {
+				errorLog.mockRestore();
+			}
 		});
 	});
 
@@ -213,6 +221,7 @@ describe("CoderAgentChatAction", () => {
 
 		const inputs = createMockInputs({
 			githubUserID: 12345,
+			commentOnIssue: false,
 		});
 		const action = new CoderAgentChatAction(
 			coderClient,
@@ -298,10 +307,9 @@ describe("CoderAgentChatAction", () => {
 			expect(out.baseBranch).toBe("main");
 		});
 
-		test("converts empty pull_request_title to undefined", () => {
-			// pull_request_title defaults to "" in the Zod schema; the action
-			// converts that to undefined to keep the output unset rather than
-			// emitting a meaningless empty string.
+		test("converts null pull_request_title to undefined", () => {
+			// pull_request_title is .nullable().optional(); explicit null
+			// from the API maps to undefined so the output is unset.
 			const inputs = createMockInputs();
 			const action = new CoderAgentChatAction(
 				coderClient,
@@ -312,14 +320,14 @@ describe("CoderAgentChatAction", () => {
 			if (!diff) {
 				throw new Error("mockChatWithDiff must have diff_status set");
 			}
-			const chatWithEmptyTitle: typeof mockChatWithDiff = {
+			const chatWithNullTitle: typeof mockChatWithDiff = {
 				...mockChatWithDiff,
-				diff_status: { ...diff, pull_request_title: "" },
+				diff_status: { ...diff, pull_request_title: null },
 			};
 
 			const out = action.buildOutputs(
 				mockUser.username,
-				chatWithEmptyTitle,
+				chatWithNullTitle,
 				false,
 			);
 
@@ -385,6 +393,39 @@ describe("CoderAgentChatAction", () => {
 			expect(out.changedFiles).toBeUndefined();
 		});
 
+		test("skips numerics for a branch-only chat (url set, pr_number null)", () => {
+			const inputs = createMockInputs();
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+			);
+			const diff = mockChatWithDiff.diff_status;
+			if (!diff) {
+				throw new Error("mockChatWithDiff must have diff_status set");
+			}
+			// Agent pushed a branch but no PR exists yet: url is a branch
+			// comparison link, pr_number is null. Numerics belong under the
+			// pull-request-* cluster, so emitting them now would be misleading.
+			const branchOnly: typeof mockChatWithDiff = {
+				...mockChatWithDiff,
+				diff_status: {
+					...diff,
+					url: "https://github.com/test-org/test-repo/compare/main...fix/issue-123",
+					pr_number: null,
+				},
+			};
+
+			const out = action.buildOutputs(mockUser.username, branchOnly, false);
+
+			expect(out.pullRequestUrl).toBe(
+				"https://github.com/test-org/test-repo/compare/main...fix/issue-123",
+			);
+			expect(out.additions).toBeUndefined();
+			expect(out.deletions).toBeUndefined();
+			expect(out.changedFiles).toBeUndefined();
+		});
+
 		test("maps last_error to chatErrorMessage", () => {
 			const inputs = createMockInputs();
 			const action = new CoderAgentChatAction(
@@ -424,6 +465,7 @@ describe("CoderAgentChatAction", () => {
 		const inputs = createMockInputs({
 			githubUserID: undefined,
 			coderUsername: mockUser.username,
+			commentOnIssue: false,
 		});
 		const action = new CoderAgentChatAction(
 			coderClient,
@@ -528,6 +570,7 @@ describe("CoderAgentChatAction", () => {
 		const inputs = createMockInputs({
 			githubUserID: 12345,
 			workspaceId,
+			commentOnIssue: false,
 		});
 		const action = new CoderAgentChatAction(
 			coderClient,
@@ -659,7 +702,7 @@ describe("CoderAgentChatAction", () => {
 		test("does not warn at defaults", () => {
 			const warning = spyOn(core, "warning").mockImplementation(() => {});
 			try {
-				const inputs = createMockInputs({ coderOrganization: undefined });
+				const inputs = createMockInputs();
 				const action = new CoderAgentChatAction(
 					coderClient,
 					octokit as unknown as Octokit,

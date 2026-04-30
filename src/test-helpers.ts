@@ -98,7 +98,7 @@ export function createMockInputs(
 		chatPrompt: "Test prompt",
 		coderToken: "test-token",
 		coderURL: "https://coder.test",
-		coderOrganization: "coder",
+		coderOrganization: undefined,
 		githubToken: "github-token",
 		githubURL: "https://github.com/test-org/test-repo/issues/123",
 		githubUserID: 12345,
