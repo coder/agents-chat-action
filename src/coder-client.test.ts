@@ -66,10 +66,7 @@ describe("CoderClient", () => {
 			expect(rawQuery).toContain(
 				`github_com_user_id:${mockUser.github_com_user_id}`,
 			);
-			// `status:` would over-filter (excludes dormant/suspended users with
-			// valid GitHub links). coderd's GetUsers query already drops
-			// soft-deleted rows; we rely on that and the client-side `deleted`
-			// guard, never on `status:`.
+			// `status:` would over-filter dormant and suspended users.
 			expect(rawQuery).not.toContain("status:");
 		});
 

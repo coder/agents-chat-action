@@ -68,12 +68,10 @@ export class RealCoderClient implements CoderClient {
 		if (githubUserId === 0) {
 			throw "GitHub user ID cannot be 0";
 		}
-		// Defense in depth: coderd's GetUsers query hardcodes
-		// `users.deleted = false`, so the response should never include a
-		// soft-deleted row, and `codersdk.User` does not currently serialize
-		// the `deleted` flag at all. If a future schema change starts
-		// exposing it, this filter drops those rows without further code
-		// changes; today it is a no-op for every response shape we see.
+		// coderd's GetUsers SQL hardcodes `users.deleted = false`, so the
+		// response is already filtered server-side. The client-side
+		// `u.deleted !== true` pass below is forward-compatible defense in
+		// depth in case `codersdk.User` later starts serializing `deleted`.
 		const filter = `github_com_user_id:${githubUserId}`;
 		const endpoint = `/api/v2/users?q=${encodeURIComponent(filter)}`;
 		const response = await this.request<unknown[]>(endpoint);
@@ -137,12 +135,9 @@ export class RealCoderClient implements CoderClient {
 export const ChatIdSchema = z.string().uuid().brand("ChatId");
 export type ChatId = z.infer<typeof ChatIdSchema>;
 
-// User schemas (derived from create-task-action; this action additionally
-// parses an optional `deleted` flag for the deleted-user filter in
-// `getCoderUserByGitHubId`). `codersdk.User` does not currently serialize
-// `deleted`, so the field is `undefined` in practice; it is declared
-// so that future API changes are picked up without further code
-// changes.
+// `deleted` is parsed leniently: `codersdk.User` does not currently
+// serialize it, but we declare it so the filter in
+// `getCoderUserByGitHubId` keeps working if the API exposes it later.
 export const CoderSDKUserSchema = z.object({
 	id: z.string().uuid(),
 	username: z.string(),
@@ -248,10 +243,9 @@ export type CreateChatMessageResponse = z.infer<
 	typeof CreateChatMessageResponseSchema
 >;
 
-// Full enum for the `chat-error-kind` action output. This client raises
-// `user_not_found` and `user_ambiguous`; the remaining values are
-// reserved for the failure-comment slice (S5), which maps API errors to
-// the same enum.
+// Full enum for the `chat-error-kind` action output. This client only
+// raises `user_not_found` and `user_ambiguous`; the rest are populated
+// downstream when API errors are mapped to outputs.
 export const ChatErrorKindSchema = z.enum([
 	"user_not_found",
 	"user_ambiguous",
