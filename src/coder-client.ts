@@ -153,9 +153,7 @@ export const ChatStatusSchema = z.enum([
 ]);
 export type ChatStatus = z.infer<typeof ChatStatusSchema>;
 
-// ChatDiffStatusSchema describes the PR/branch metadata Agents tracks for
-// a chat. Cherry-picked from the discarded PR #1 schema; the runtime
-// behavior that consumes it lands in later slices.
+// PR/branch metadata Agents tracks for a chat.
 export const ChatDiffStatusSchema = z.object({
 	chat_id: z.string().uuid(),
 	url: z.string().nullable().optional(),

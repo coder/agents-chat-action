@@ -96,32 +96,28 @@ export class CoderAgentChatAction {
 	}
 
 	/**
-	 * Warn loudly when the user opts in to inputs whose behavior has not
-	 * landed yet. The schema accepts these so the slice series (S4 wait,
-	 * S7 idempotency) can wire each one without amending action.yaml
-	 * again, but a workflow author who explicitly sets `wait: complete`
-	 * deserves to see that the action will not honor it yet rather than
-	 * silently returning early.
+	 * Warn loudly when the user opts in to inputs whose runtime behavior
+	 * is not yet wired. The schema accepts these so the contract is stable;
+	 * the warning prevents silent no-ops for workflow authors who explicitly
+	 * opt in.
 	 */
 	warnUnwiredInputs(): void {
 		if (this.inputs.wait === "complete") {
 			core.warning(
-				"`wait: complete` is declared but not yet implemented in this slice; " +
-					"the action will return immediately. Tracked in S4.",
+				"`wait: complete` is declared but not yet implemented; " +
+					"the action will return immediately.",
 			);
 		}
 		if (this.inputs.idempotencyLabelKey !== undefined) {
 			core.warning(
-				"`idempotency-label-key` is declared but not yet implemented in this slice; " +
-					"the action will always create a new chat. Tracked in S7.",
+				"`idempotency-label-key` is declared but not yet implemented; " +
+					"the action will always create a new chat.",
 			);
 		}
 	}
 
 	/**
-	 * Build a rich ActionOutputs from a Chat response. Cherry-picked from
-	 * the discarded PR #1; populates v0 outputs from data the chats API
-	 * already returns.
+	 * Build a rich ActionOutputs from a Chat response.
 	 */
 	buildOutputs(
 		coderUsername: string,
@@ -139,10 +135,8 @@ export class CoderAgentChatAction {
 			workspaceId: chat.workspace_id ?? undefined,
 			pullRequestUrl: diff?.url ?? undefined,
 			pullRequestState: diff?.pull_request_state ?? undefined,
-			// pull_request_title defaults to "" in the Zod schema; use `||`
-			// to also fall through empty string to undefined so the action
-			// output is unset rather than blank. Diverges intentionally from
-			// the `??` style used by the other nullable fields.
+			// Empty pull_request_title (the Zod default) maps to undefined so
+			// the output stays unset rather than blank.
 			pullRequestTitle: diff?.pull_request_title || undefined,
 			pullRequestNumber: diff?.pr_number ?? undefined,
 			additions: diff?.additions,
@@ -172,15 +166,13 @@ export class CoderAgentChatAction {
 			);
 			coderUsername = coderUser.username;
 		} else {
-			// The schema permits both identity inputs to be unset so S2 can
-			// auto-resolve from `github.context`. Until S2 lands, fail with a
-			// message that names both inputs and the slice that wires the
-			// fallback rather than crashing inside the user lookup with a
-			// misleading "GitHub user ID cannot be undefined" error.
+			// Both identity inputs are unset. The schema permits this so the
+			// runtime can later auto-resolve from the workflow context; until
+			// that path lands, fail with a clear message rather than crashing
+			// inside the user lookup.
 			throw new Error(
 				"Cannot resolve Coder user: set either `github-user-id` or " +
-					"`coder-username`. Auto-resolution from the workflow context " +
-					"is tracked in S2.",
+					"`coder-username`.",
 			);
 		}
 
@@ -203,11 +195,10 @@ export class CoderAgentChatAction {
 			});
 			core.info("Message sent successfully");
 
-			// Fetch the full chat after the message so the action surfaces a
-			// consistent output shape regardless of which path created or
-			// continued the chat. If the fetch fails, fall back to a minimal
-			// output rather than failing the whole step, since the follow-up
-			// message has already been sent successfully.
+			// Fetch the full chat after the message so outputs are consistent
+			// with the create path. If the fetch fails, fall back to minimal
+			// outputs rather than failing the step, since the message has
+			// already been sent.
 			let chat: CoderChat | undefined;
 			try {
 				chat = await this.coder.getChat(chatId);

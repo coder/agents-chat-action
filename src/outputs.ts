@@ -1,13 +1,8 @@
 import * as core from "@actions/core";
 import type { ActionOutputs } from "./schemas";
 
-/**
- * OUTPUT_MAP declares how each `ActionOutputs` property maps to its
- * `action.yaml` output name. Required entries are always emitted; optional
- * entries are emitted only when defined. Keeping the list data-driven
- * prevents drift between property names and YAML output names that a
- * conditional `setOutput` chain hides.
- */
+// Maps each ActionOutputs property to its action.yaml output name.
+// Required entries are always emitted; optional entries only when defined.
 export const OUTPUT_MAP: ReadonlyArray<{
 	name: string;
 	prop: keyof ActionOutputs;
@@ -33,25 +28,17 @@ export const OUTPUT_MAP: ReadonlyArray<{
 	{ name: "chat-error-message", prop: "chatErrorMessage" },
 ];
 
-/**
- * setActionOutputs writes every entry from OUTPUT_MAP to GitHub Actions
- * outputs. Optional entries with `undefined` values are skipped so
- * downstream `if:` guards behave the way workflow authors expect.
- * Numbers and booleans are coerced via `String(...)` so the emitted
- * value is the same regardless of the runtime type.
- */
+// Writes ActionOutputs to GitHub Actions outputs. Optional entries with
+// undefined values are skipped so downstream `if:` guards work; values
+// are coerced to strings so numbers and booleans serialize predictably.
 export function setActionOutputs(outputs: ActionOutputs): void {
 	for (const { name, prop, required } of OUTPUT_MAP) {
 		const value = outputs[prop];
 		if (!required && value === undefined) {
 			continue;
 		}
-		// Required fields with `undefined` values fall through to the
-		// empty string. This is defensive: ActionOutputsSchema rejects
-		// missing required fields, so this branch should not fire in
-		// practice, but emitting `""` rather than crashing here keeps
-		// the workflow log readable if someone short-circuits the
-		// schema in tests.
+		// Defensive: ActionOutputsSchema rejects missing required fields,
+		// but emit "" rather than crashing if a test bypasses the schema.
 		const stringified = typeof value === "string" ? value : String(value ?? "");
 		core.setOutput(name, stringified);
 	}

@@ -389,7 +389,7 @@ describe("CoderAgentChatAction", () => {
 		const parsedResult = ActionOutputsSchema.parse(result);
 		expect(parsedResult.chatCreated).toBe(false);
 		expect(parsedResult.chatId).toBe(existingChatId);
-		// Existing-chat path now populates the same outputs as the create path.
+		// Existing-chat path populates the same outputs as the create path.
 		expect(parsedResult.chatStatus).toBe("running");
 		expect(parsedResult.chatTitle).toBe("Test chat");
 		expect(parsedResult.workspaceId).toBe(mockChat.workspace_id ?? undefined);
@@ -576,14 +576,13 @@ describe("CoderAgentChatAction", () => {
 				inputs,
 			);
 
-			// The schema permits both unset (S2 will auto-resolve from
-			// github.context). Until S2 lands, action.run must fail with a
-			// clear message instead of calling the user lookup with
-			// undefined.
+			// Both identity inputs unset. The schema permits this so the
+			// runtime can later auto-resolve from the workflow context;
+			// until that lands, action.run must fail with a clear message
+			// instead of calling the user lookup with undefined.
 			expect(action.run()).rejects.toThrow(
 				/set either `github-user-id` or `coder-username`/,
 			);
-			expect(action.run()).rejects.toThrow(/tracked in S2/i);
 			expect(coderClient.mockGetCoderUserByGithubID).not.toHaveBeenCalled();
 		});
 	});

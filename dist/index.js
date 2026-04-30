@@ -22789,10 +22789,10 @@ class CoderAgentChatAction {
   }
   warnUnwiredInputs() {
     if (this.inputs.wait === "complete") {
-      core.warning("`wait: complete` is declared but not yet implemented in this slice; " + "the action will return immediately. Tracked in S4.");
+      core.warning("`wait: complete` is declared but not yet implemented; " + "the action will return immediately.");
     }
     if (this.inputs.idempotencyLabelKey !== undefined) {
-      core.warning("`idempotency-label-key` is declared but not yet implemented in this slice; " + "the action will always create a new chat. Tracked in S7.");
+      core.warning("`idempotency-label-key` is declared but not yet implemented; " + "the action will always create a new chat.");
     }
   }
   buildOutputs(coderUsername, chat, chatCreated) {
@@ -22827,7 +22827,7 @@ class CoderAgentChatAction {
       const coderUser = await this.coder.getCoderUserByGitHubId(this.inputs.githubUserID);
       coderUsername = coderUser.username;
     } else {
-      throw new Error("Cannot resolve Coder user: set either `github-user-id` or " + "`coder-username`. Auto-resolution from the workflow context " + "is tracked in S2.");
+      throw new Error("Cannot resolve Coder user: set either `github-user-id` or " + "`coder-username`.");
     }
     const { githubOrg, githubRepo, githubIssueNumber } = this.parseGithubURL();
     core.info(`GitHub owner: ${githubOrg}`);

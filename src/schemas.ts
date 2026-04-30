@@ -1,13 +1,9 @@
 import { z } from "zod";
 
-/**
- * Object shape for the raw action inputs. The mutual-exclusion rule for
- * github-user-id and coder-username is enforced by the wrapper schema below.
- *
- * Both identity inputs are optional at the object level. S2 adds an
- * auto-resolve fallback that lets the action run with neither set; S1
- * declares the schema shape that S2 builds on.
- */
+// Mutual exclusion of github-user-id and coder-username is enforced by
+// the wrapper schema below. Both identity inputs are optional at the
+// object level so the runtime can later auto-resolve from the workflow
+// context.
 const ActionInputsObjectSchema = z.object({
 	chatPrompt: z.string().min(1),
 	coderToken: z.string().min(1),
@@ -38,17 +34,13 @@ export const ActionInputsSchema = ActionInputsObjectSchema.refine(
 
 export type ActionInputs = z.infer<typeof ActionInputsSchema>;
 
-/**
- * Action outputs surface for v0. Only the four core fields are guaranteed.
- * The rest are optional: they are populated by later slices (S4 wait, S5
- * failure path, S8 success path) as behavior lands.
- */
+// Only the four core fields are guaranteed; the rest are populated
+// when the runtime path produces them.
 export const ActionOutputsSchema = z.object({
 	coderUsername: z.string(),
 	chatId: z.string().uuid(),
 	chatUrl: z.string().url(),
 	chatCreated: z.boolean(),
-	// Chat metadata (cherry-picked from the discarded PR #1 schema).
 	chatStatus: z.string().optional(),
 	chatTitle: z.string().optional(),
 	workspaceId: z.string().uuid().optional(),
@@ -62,7 +54,7 @@ export const ActionOutputsSchema = z.object({
 	changedFiles: z.number().optional(),
 	headBranch: z.string().optional(),
 	baseBranch: z.string().optional(),
-	// Failure-path outputs, populated by S5 when the chat errors.
+	// Populated when the chat fails.
 	chatErrorKind: z.string().optional(),
 	chatErrorMessage: z.string().optional(),
 });
