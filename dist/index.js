@@ -26895,16 +26895,18 @@ class RealCoderClient {
     if (githubUserId === 0) {
       throw "GitHub user ID cannot be 0";
     }
-    const endpoint = `/api/v2/users?q=${encodeURIComponent(`github_com_user_id:${githubUserId}`)}`;
+    const filter = `github_com_user_id:${githubUserId}`;
+    const endpoint = `/api/v2/users?q=${encodeURIComponent(filter)}`;
     const response = await this.request(endpoint);
     const userList = CoderSDKGetUsersResponseSchema.parse(response);
-    if (userList.users.length === 0) {
-      throw new CoderAPIError(`No Coder user found with GitHub user ID ${githubUserId}`, 404);
+    const liveUsers = userList.users.filter((u) => u.deleted !== true);
+    if (liveUsers.length === 0) {
+      throw new CoderAPIError(`No Coder user found with GitHub user ID ${githubUserId}`, 404, undefined, "user_not_found");
     }
-    if (userList.users.length > 1) {
-      throw new CoderAPIError(`Multiple Coder users found with GitHub user ID ${githubUserId}`, 409);
+    if (liveUsers.length > 1) {
+      throw new CoderAPIError(`Multiple Coder users found with GitHub user ID ${githubUserId}`, 409, undefined, "user_ambiguous");
     }
-    return CoderSDKUserSchema.parse(userList.users[0]);
+    return CoderSDKUserSchema.parse(liveUsers[0]);
   }
   async createChat(params) {
     const endpoint = "/api/experimental/chats";
@@ -26940,7 +26942,8 @@ var CoderSDKUserSchema = exports_external.object({
   username: exports_external.string(),
   email: exports_external.string().email(),
   organization_ids: exports_external.array(exports_external.string().uuid()),
-  github_com_user_id: exports_external.number().optional()
+  github_com_user_id: exports_external.number().optional(),
+  deleted: exports_external.boolean().optional()
 });
 var CoderSDKGetUsersResponseSchema = exports_external.object({
   users: exports_external.array(CoderSDKUserSchema)
@@ -27006,14 +27009,24 @@ var CreateChatMessageRequestSchema = exports_external.object({
 var CreateChatMessageResponseSchema = exports_external.object({
   queued: exports_external.boolean()
 });
+var ChatErrorKindSchema = exports_external.enum([
+  "user_not_found",
+  "user_ambiguous",
+  "org_not_found",
+  "spend_exceeded",
+  "api_error",
+  "timeout"
+]);
 
 class CoderAPIError extends Error {
   statusCode;
   response;
-  constructor(message, statusCode, response) {
+  kind;
+  constructor(message, statusCode, response, kind) {
     super(message);
     this.statusCode = statusCode;
     this.response = response;
+    this.kind = kind;
     this.name = "CoderAPIError";
   }
 }
