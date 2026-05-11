@@ -104,8 +104,8 @@ export class RealCoderClient implements CoderClient {
 		}
 		if (githubUserId === 0) {
 			// Defense in depth: the input schema rejects 0 upstream. Throw
-			// CoderAPIError so callers can branch on the kind discriminator
-			// and `instanceof CoderAPIError` checks downstream stay sound.
+			// CoderAPIError so `instanceof` checks and classifyError routing
+			// downstream stay sound.
 			throw new CoderAPIError("GitHub user ID cannot be 0", 400);
 		}
 		// coderd's GetUsers SQL hardcodes `users.deleted = false`, so the
