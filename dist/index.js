@@ -26720,11 +26720,19 @@ class RealCoderClient {
   }
   async request(endpoint, options) {
     const url = `${this.serverURL}${endpoint}`;
-    const response = await fetch(url, {
-      ...options,
-      headers: { ...this.headers, ...options?.headers },
-      signal: options?.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS)
-    });
+    let response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers: { ...this.headers, ...options?.headers },
+        signal: options?.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS)
+      });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "TimeoutError") {
+        throw new CoderAPIError(`Request to ${endpoint} timed out after ${DEFAULT_REQUEST_TIMEOUT_MS}ms`, 0);
+      }
+      throw err;
+    }
     if (!response.ok) {
       const body = await response.text().catch(() => "");
       throw new CoderAPIError(`Coder API error: ${response.statusText}`, response.status, body);
