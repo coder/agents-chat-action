@@ -13,12 +13,12 @@ import {
 	buildCommentMarker,
 	buildDeploymentChatsUrl,
 	buildFailureCommentBody,
+	buildSuccessCommentBody,
 	classifyError,
 	deriveCommentKey,
 	type FailureDetail,
 	GITHUB_URL_REGEX,
 	normalizeBaseUrl,
-	upsertComment,
 	upsertCommentByMarker,
 } from "./comment";
 import type { ActionInputs, ActionOutputs, ChatErrorKind } from "./schemas";
@@ -320,26 +320,52 @@ export class CoderAgentChatAction {
 		return `${normalizeBaseUrl(this.inputs.coderURL)}/chats/${chatId}`;
 	}
 
-	// Comment on the linked GitHub issue or pull request with the chat link
-	// via the shared `upsertComment` helper. The predicate matches the
-	// success-path "Agent chat:" prefix, distinct from the failure-comment
-	// marker, so a successful re-run after a failed run currently leaves the
-	// failure comment in place rather than collapsing both onto one comment
-	// per target. Tracked in CODAGT-288.
-	async commentOnIssue(
-		chatUrl: string,
-		owner: string,
-		repo: string,
-		issueNumber: number,
-	): Promise<void> {
-		const body = `Agent chat: ${chatUrl}`;
-		await upsertComment({
+	// Post or update the success comment on the linked issue or pull
+	// request. Shares the marker with the failure-path comment so re-runs
+	// after a failure replace the failure comment in place rather than
+	// stacking. The marker is computed the same way as in `handleFailure`
+	// (`GITHUB_WORKFLOW`-scoped unless `idempotency-key` is set).
+	//
+	// `hasPR` gates `pullRequestUrl` and the diff numerics so a chat with
+	// `diff_status` but no PR yet (`pr_number == null`) does not render a
+	// misleading comparison URL labelled "Pull request:" or "+0 additions"
+	// lines from the Zod-default zeros. `buildOutputs` intentionally
+	// diverges: it emits `diff?.url` unconditionally so callers can read a
+	// comparison URL when no PR exists yet.
+	async commentOnIssue(args: {
+		chatUrl: string;
+		owner: string;
+		repo: string;
+		issueNumber: number;
+		chatCreated: boolean;
+		chat?: CoderChat;
+	}): Promise<void> {
+		// `GITHUB_WORKFLOW` is read at the call site so `deriveCommentKey`
+		// stays pure and tests stay deterministic.
+		const workflow = process.env.GITHUB_WORKFLOW || undefined;
+		const marker = buildCommentMarker(
+			deriveCommentKey({ ...this.inputs, workflow }),
+		);
+		const diff = args.chat?.diff_status;
+		const hasPR = diff?.pr_number != null;
+		const body = buildSuccessCommentBody({
+			chatUrl: args.chatUrl,
+			chatStatus: args.chat?.status,
+			marker,
+			waitMode: this.inputs.wait === "complete" ? "complete" : "none",
+			chatCreated: args.chatCreated,
+			pullRequestUrl: hasPR ? (diff?.url ?? undefined) : undefined,
+			additions: hasPR ? (diff?.additions ?? undefined) : undefined,
+			deletions: hasPR ? (diff?.deletions ?? undefined) : undefined,
+			changedFiles: hasPR ? (diff?.changed_files ?? undefined) : undefined,
+		});
+		await upsertCommentByMarker({
 			octokit: this.octokit,
-			owner,
-			repo,
-			issueNumber,
+			owner: args.owner,
+			repo: args.repo,
+			issueNumber: args.issueNumber,
 			body,
-			predicate: (comment) => comment.body?.startsWith("Agent chat:") ?? false,
+			marker,
 		});
 	}
 
@@ -873,6 +899,8 @@ export class CoderAgentChatAction {
 		const body = buildFailureCommentBody(detail, {
 			chatsUrl: buildDeploymentChatsUrl(this.inputs.coderURL),
 			marker,
+			chatUrl: failure.chatUrl,
+			chatStatus: failure.chat?.status,
 		});
 		await upsertCommentByMarker({
 			octokit: this.octokit,
@@ -946,12 +974,14 @@ export class CoderAgentChatAction {
 				core.info(
 					`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`,
 				);
-				await this.commentOnIssue(
+				await this.commentOnIssue({
 					chatUrl,
-					githubOrg,
-					githubRepo,
-					githubIssueNumber,
-				);
+					owner: githubOrg,
+					repo: githubRepo,
+					issueNumber: githubIssueNumber,
+					chatCreated: false,
+					chat,
+				});
 			}
 
 			if (chat) {
@@ -1008,12 +1038,14 @@ export class CoderAgentChatAction {
 			core.info(
 				`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`,
 			);
-			await this.commentOnIssue(
+			await this.commentOnIssue({
 				chatUrl,
-				githubOrg,
-				githubRepo,
-				githubIssueNumber,
-			);
+				owner: githubOrg,
+				repo: githubRepo,
+				issueNumber: githubIssueNumber,
+				chatCreated: true,
+				chat: finalChat,
+			});
 		} else {
 			core.info("Skipping comment on issue (commentOnIssue is false)");
 		}

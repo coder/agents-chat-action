@@ -157,7 +157,7 @@ describe("CoderAgentChatAction", () => {
 	});
 
 	describe("commentOnIssue", () => {
-		test("creates new comment when none exists", async () => {
+		test("creates new comment with marker when none exists", async () => {
 			octokit.rest.issues.listComments.mockResolvedValue({
 				data: [],
 			} as ReturnType<typeof octokit.rest.issues.listComments>);
@@ -173,20 +173,36 @@ describe("CoderAgentChatAction", () => {
 				createMockContext(),
 			);
 
-			await action.commentOnIssue("chat-url", "owner", "repo", 123);
-
-			expect(octokit.rest.issues.createComment).toHaveBeenCalledWith({
+			await action.commentOnIssue({
+				chatUrl: "chat-url",
 				owner: "owner",
 				repo: "repo",
-				issue_number: 123,
-				body: "Agent chat: chat-url",
+				issueNumber: 123,
+				chatCreated: true,
 			});
+
+			expect(octokit.rest.issues.createComment).toHaveBeenCalledTimes(1);
+			const call = octokit.rest.issues.createComment.mock.calls[0]?.[0] as {
+				owner: string;
+				repo: string;
+				issue_number: number;
+				body: string;
+			};
+			expect(call.owner).toBe("owner");
+			expect(call.repo).toBe("repo");
+			expect(call.issue_number).toBe(123);
+			expect(call.body).toContain("**Coder Agent Chat: created**");
+			expect(call.body).toContain("Chat: chat-url");
+			expect(call.body).toContain(
+				"<!-- coder-agent-chat-action:test-org/test-repo#123 -->",
+			);
 		});
 
-		test("updates existing Agent chat comment", async () => {
+		test("updates the existing marker comment in place", async () => {
+			const marker = "<!-- coder-agent-chat-action:test-org/test-repo#123 -->";
 			octokit.rest.issues.listComments.mockResolvedValue({
 				data: [
-					{ id: 1, body: "Agent chat: old-url" },
+					{ id: 1, body: `prior\n\n${marker}` },
 					{ id: 2, body: "Other comment" },
 				],
 			} as ReturnType<typeof octokit.rest.issues.listComments>);
@@ -202,14 +218,22 @@ describe("CoderAgentChatAction", () => {
 				createMockContext(),
 			);
 
-			await action.commentOnIssue("new-url", "owner", "repo", 123);
-
-			expect(octokit.rest.issues.updateComment).toHaveBeenCalledWith({
+			await action.commentOnIssue({
+				chatUrl: "new-url",
 				owner: "owner",
 				repo: "repo",
-				comment_id: 1,
-				body: "Agent chat: new-url",
+				issueNumber: 123,
+				chatCreated: true,
 			});
+
+			expect(octokit.rest.issues.updateComment).toHaveBeenCalledTimes(1);
+			const call = octokit.rest.issues.updateComment.mock.calls[0]?.[0] as {
+				comment_id: number;
+				body: string;
+			};
+			expect(call.comment_id).toBe(1);
+			expect(call.body).toContain("Chat: new-url");
+			expect(call.body).toContain(marker);
 		});
 
 		test("warns but doesn't fail on GitHub API error", async () => {
@@ -228,10 +252,16 @@ describe("CoderAgentChatAction", () => {
 				);
 
 				await expect(
-					action.commentOnIssue("url", "owner", "repo", 123),
+					action.commentOnIssue({
+						chatUrl: "url",
+						owner: "owner",
+						repo: "repo",
+						issueNumber: 123,
+						chatCreated: true,
+					}),
 				).resolves.toBeUndefined();
 				expect(errorLog).toHaveBeenCalledWith(
-					expect.stringContaining("Failed to post comment"),
+					expect.stringContaining("Failed to post failure comment"),
 				);
 			} finally {
 				errorLog.mockRestore();
