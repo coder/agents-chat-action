@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+/**
+ * Default per-request timeout. A hung Coder server would otherwise burn
+ * CI minutes up to the workflow's job-level timeout (default 6 hours).
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
 export interface CoderClient {
 	getCoderUserByGitHubId(
 		githubUserId: number | undefined,
@@ -52,6 +58,8 @@ export class RealCoderClient implements CoderClient {
 		const response = await fetch(url, {
 			...options,
 			headers: { ...this.headers, ...options?.headers },
+			signal:
+				options?.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS),
 		});
 
 		if (!response.ok) {
@@ -80,7 +88,10 @@ export class RealCoderClient implements CoderClient {
 			throw new CoderAPIError("GitHub user ID cannot be undefined", 400);
 		}
 		if (githubUserId === 0) {
-			throw "GitHub user ID cannot be 0";
+			// Defense in depth: the input schema rejects 0 upstream, but a
+			// bare-string throw would skip the `instanceof Error` branch in
+			// index.ts and produce a useless error message.
+			throw new CoderAPIError("GitHub user ID cannot be 0", 400);
 		}
 		// coderd's GetUsers SQL hardcodes `users.deleted = false`, so the
 		// response is already filtered server-side. The client-side

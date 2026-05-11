@@ -154,9 +154,13 @@ describe("CoderClient", () => {
 		});
 
 		test("throws when GitHub user ID is 0", async () => {
-			expect(client.getCoderUserByGitHubId(0)).rejects.toThrow(
+			await expect(client.getCoderUserByGitHubId(0)).rejects.toBeInstanceOf(
+				CoderAPIError,
+			);
+			await expect(client.getCoderUserByGitHubId(0)).rejects.toThrow(
 				"GitHub user ID cannot be 0",
 			);
+			expect(mockFetch).not.toHaveBeenCalled();
 		});
 	});
 
@@ -366,6 +370,45 @@ describe("CoderClient", () => {
 
 			expect(caught).toBeInstanceOf(CoderAPIError);
 			expect((caught as CoderAPIError).statusCode).toBe(404);
+		});
+	});
+
+	describe("request timeout", () => {
+		test("aborts requests that exceed the default timeout window", async () => {
+			const originalTimeout = AbortSignal.timeout;
+			try {
+				// Drive the abort deterministically with a 10ms timeout so the
+				// test does not wait the production 30s.
+				AbortSignal.timeout = ((_ms: number) =>
+					originalTimeout.call(AbortSignal, 10)) as typeof AbortSignal.timeout;
+				mockFetch.mockImplementation(
+					(_url: string, init?: RequestInit) =>
+						new Promise((_resolve, reject) => {
+							// Keep the event loop alive so the abort timer fires.
+							const keepalive = setTimeout(() => {}, 5000);
+							if (init?.signal?.aborted) {
+								clearTimeout(keepalive);
+								reject(init.signal.reason);
+								return;
+							}
+							init?.signal?.addEventListener("abort", () => {
+								clearTimeout(keepalive);
+								reject(init.signal?.reason);
+							});
+						}),
+				);
+				await expect(client.getChat(mockChat.id)).rejects.toThrow();
+			} finally {
+				AbortSignal.timeout = originalTimeout;
+			}
+		});
+
+		test("passes a default AbortSignal to fetch", async () => {
+			mockFetch.mockResolvedValueOnce(createMockResponse(mockChat));
+			await client.getChat(mockChat.id);
+			const call = mockFetch.mock.calls[0];
+			const init = call[1] as RequestInit;
+			expect(init.signal).toBeInstanceOf(AbortSignal);
 		});
 	});
 });
