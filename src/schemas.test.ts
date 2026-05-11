@@ -191,6 +191,38 @@ describe("ActionInputsSchema", () => {
 			expect(() => ActionInputsSchema.parse(input)).toThrow();
 		});
 
+		// NaN is what `Number("123abc")` returns. Pinning this keeps the
+		// schema as the second line of defense behind src/index.ts so a
+		// future regression in the input parser fails parse rather than
+		// silently resolving to the wrong Coder user. See #16.
+		test("rejects NaN githubUserID", () => {
+			const input = {
+				...actionInputValid,
+				githubUserID: Number.NaN,
+			};
+			expect(() => ActionInputsSchema.parse(input)).toThrow();
+		});
+
+		test("rejects non-integer githubUserID", () => {
+			const input = {
+				...actionInputValid,
+				githubUserID: 12.5,
+			};
+			expect(() => ActionInputsSchema.parse(input)).toThrow();
+		});
+
+		// Mirrors the index.ts parsing flow for an invalid workflow input.
+		// Number("123abc") returns NaN, which the schema must reject. See
+		// #16: parseInt would have silently coerced this to 123.
+		test("rejects githubUserID derived from non-numeric input", () => {
+			const raw = "123abc";
+			const input = {
+				...actionInputValid,
+				githubUserID: Number(raw),
+			};
+			expect(() => ActionInputsSchema.parse(input)).toThrow();
+		});
+
 		test("rejects empty coderUsername", () => {
 			const { githubUserID: _, ...withoutGithubUserID } = actionInputValid;
 			const input = { ...withoutGithubUserID, coderUsername: "" };

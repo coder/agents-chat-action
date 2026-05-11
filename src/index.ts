@@ -8,8 +8,12 @@ import { ActionInputsSchema } from "./schemas";
 async function main() {
 	try {
 		const githubUserIdInput = core.getInput("github-user-id");
+		// Use Number() rather than parseInt() so trailing non-numeric
+		// characters (e.g. `"123abc"`) produce NaN, which the schema
+		// rejects cleanly. parseInt would silently return 123 and resolve
+		// to the wrong Coder user. See #16.
 		const githubUserID = githubUserIdInput
-			? Number.parseInt(githubUserIdInput, 10)
+			? Number(githubUserIdInput)
 			: undefined;
 
 		const inputs = ActionInputsSchema.parse({
