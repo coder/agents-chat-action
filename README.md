@@ -115,9 +115,9 @@ jobs:
 | pull-request-state  | Pull request state (open, closed, merged) when available.                                                                                                |
 | pull-request-title  | Title of the pull request when available.                                                                                                                |
 | pull-request-number | Pull request number when available.                                                                                                                      |
-| additions           | Number of lines added in tracked changes.                                                                                                                |
-| deletions           | Number of lines deleted in tracked changes.                                                                                                              |
-| changed-files       | Number of files changed in tracked changes.                                                                                                              |
+| diff-additions      | Number of lines added in tracked changes.                                                                                                                |
+| diff-deletions      | Number of lines deleted in tracked changes.                                                                                                              |
+| diff-changed-files  | Number of files changed in tracked changes.                                                                                                              |
 | head-branch         | Head branch name when available.                                                                                                                         |
 | base-branch         | Base branch name when available.                                                                                                                         |
 | chat-error-kind     | Machine-readable error kind when the chat fails. Reserved; not yet populated.                                                                           |

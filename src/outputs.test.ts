@@ -43,9 +43,9 @@ describe("OUTPUT_MAP", () => {
 			"pull-request-state",
 			"pull-request-title",
 			"pull-request-number",
-			"additions",
-			"deletions",
-			"changed-files",
+			"diff-additions",
+			"diff-deletions",
+			"diff-changed-files",
 			"head-branch",
 			"base-branch",
 			"chat-error-kind",
@@ -107,7 +107,7 @@ describe("setActionOutputs", () => {
 		const cap = captureSetOutput();
 		try {
 			setActionOutputs({ ...baseOutputs, additions: 0 });
-			const additions = cap.calls.find(([n]) => n === "additions");
+			const additions = cap.calls.find(([n]) => n === "diff-additions");
 			expect(additions).toBeDefined();
 			expect(additions?.[1]).toBe("0");
 		} finally {
@@ -139,16 +139,16 @@ describe("setActionOutputs", () => {
 			});
 			const numericPairs = cap.calls.filter(([n]) =>
 				[
-					"additions",
-					"deletions",
-					"changed-files",
+					"diff-additions",
+					"diff-deletions",
+					"diff-changed-files",
 					"pull-request-number",
 				].includes(n),
 			);
 			const map = Object.fromEntries(numericPairs);
-			expect(map.additions).toBe("50");
-			expect(map.deletions).toBe("10");
-			expect(map["changed-files"]).toBe("3");
+			expect(map["diff-additions"]).toBe("50");
+			expect(map["diff-deletions"]).toBe("10");
+			expect(map["diff-changed-files"]).toBe("3");
 			expect(map["pull-request-number"]).toBe("42");
 		} finally {
 			cap.restore();

@@ -104,13 +104,13 @@ outputs:
   pull-request-number:
     description: "Pull request number when available."
 
-  additions:
+  diff-additions:
     description: "Number of lines added in tracked changes."
 
-  deletions:
+  diff-deletions:
     description: "Number of lines deleted in tracked changes."
 
-  changed-files:
+  diff-changed-files:
     description: "Number of files changed in tracked changes."
 
   head-branch:
