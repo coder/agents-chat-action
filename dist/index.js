@@ -26705,215 +26705,8 @@ var coerce = {
   date: (arg) => ZodDate.create({ ...arg, coerce: true })
 };
 var NEVER = INVALID;
-// src/coder-client.ts
-class RealCoderClient {
-  serverURL;
-  headers;
-  constructor(serverURL, apiToken) {
-    this.serverURL = serverURL;
-    this.headers = {
-      "Coder-Session-Token": apiToken,
-      "Content-Type": "application/json"
-    };
-  }
-  async request(endpoint, options) {
-    const url = `${this.serverURL}${endpoint}`;
-    const response = await fetch(url, {
-      ...options,
-      headers: { ...this.headers, ...options?.headers }
-    });
-    if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new CoderAPIError(`Coder API error: ${response.statusText}`, response.status, body);
-    }
-    if (response.status === 204 || response.headers?.get("content-length") === "0") {
-      return;
-    }
-    return response.json();
-  }
-  async getCoderUserByGitHubId(githubUserId) {
-    if (githubUserId === undefined) {
-      throw new CoderAPIError("GitHub user ID cannot be undefined", 400);
-    }
-    if (githubUserId === 0) {
-      throw "GitHub user ID cannot be 0";
-    }
-    const filter = `github_com_user_id:${githubUserId}`;
-    const endpoint = `/api/v2/users?q=${encodeURIComponent(filter)}`;
-    const response = await this.request(endpoint);
-    const userList = CoderSDKGetUsersResponseSchema.parse(response);
-    const liveUsers = userList.users.filter((u) => u.deleted !== true);
-    if (liveUsers.length === 0) {
-      throw new CoderAPIError(`No Coder user found with GitHub user ID ${githubUserId}`, 404, undefined, "user_not_found");
-    }
-    if (liveUsers.length > 1) {
-      throw new CoderAPIError(`Multiple Coder users found with GitHub user ID ${githubUserId}`, 409, undefined, "user_ambiguous");
-    }
-    return CoderSDKUserSchema.parse(liveUsers[0]);
-  }
-  async getCoderUserByUsername(username) {
-    if (!username) {
-      throw new CoderAPIError("Coder username cannot be empty", 400);
-    }
-    const endpoint = `/api/v2/users/${encodeURIComponent(username)}`;
-    try {
-      const response = await this.request(endpoint);
-      return CoderSDKUserSchema.parse(response);
-    } catch (err) {
-      if (err instanceof CoderAPIError && err.statusCode === 404) {
-        throw new CoderAPIError(`No Coder user found with username "${username}"`, 404, err.response, "user_not_found");
-      }
-      throw err;
-    }
-  }
-  async getOrganizationByName(name) {
-    if (!name) {
-      throw new CoderAPIError("Organization name cannot be empty", 400);
-    }
-    const endpoint = `/api/v2/organizations/${encodeURIComponent(name)}`;
-    const response = await this.request(endpoint);
-    return CoderOrganizationSchema.parse(response);
-  }
-  async createChat(params) {
-    const endpoint = "/api/experimental/chats";
-    const response = await this.request(endpoint, {
-      method: "POST",
-      body: JSON.stringify(params)
-    });
-    return CoderChatSchema.parse(response);
-  }
-  async createChatMessage(chatId, params) {
-    const endpoint = `/api/experimental/chats/${encodeURIComponent(chatId)}/messages`;
-    const response = await this.request(endpoint, {
-      method: "POST",
-      body: JSON.stringify(params)
-    });
-    return CreateChatMessageResponseSchema.parse(response);
-  }
-  async getChat(chatId) {
-    const endpoint = `/api/experimental/chats/${encodeURIComponent(chatId)}`;
-    const response = await this.request(endpoint);
-    return CoderChatSchema.parse(response);
-  }
-  async listChats(opts) {
-    const params = [];
-    if (opts?.label !== undefined) {
-      const labels = Array.isArray(opts.label) ? opts.label : [opts.label];
-      for (const l of labels) {
-        params.push(`label=${encodeURIComponent(l)}`);
-      }
-    }
-    if (opts?.archived === false) {
-      params.push(`q=${encodeURIComponent("archived:false")}`);
-    }
-    const query = params.length ? `?${params.join("&")}` : "";
-    const endpoint = `/api/experimental/chats${query}`;
-    const response = await this.request(endpoint);
-    const parsed = CoderChatListResponseSchema.parse(response);
-    return parsed;
-  }
-}
-var ChatIdSchema = exports_external.string().uuid().brand("ChatId");
-var CoderSDKUserSchema = exports_external.object({
-  id: exports_external.string().uuid(),
-  username: exports_external.string(),
-  email: exports_external.string().email(),
-  organization_ids: exports_external.array(exports_external.string().uuid()),
-  github_com_user_id: exports_external.number().optional(),
-  deleted: exports_external.boolean().optional()
-});
-var CoderSDKGetUsersResponseSchema = exports_external.object({
-  users: exports_external.array(CoderSDKUserSchema)
-});
-var CoderOrganizationSchema = exports_external.object({
-  id: exports_external.string().uuid(),
-  name: exports_external.string(),
-  display_name: exports_external.string().optional()
-});
-var ChatStatusSchema = exports_external.enum([
-  "waiting",
-  "pending",
-  "running",
-  "paused",
-  "completed",
-  "error"
-]);
-var ChatDiffStatusSchema = exports_external.object({
-  chat_id: exports_external.string().uuid(),
-  url: exports_external.string().nullable().optional(),
-  pull_request_state: exports_external.string().nullable().optional(),
-  pull_request_title: exports_external.string().nullable().optional(),
-  pull_request_draft: exports_external.boolean().default(false),
-  changes_requested: exports_external.boolean().default(false),
-  additions: exports_external.number().default(0),
-  deletions: exports_external.number().default(0),
-  changed_files: exports_external.number().default(0),
-  author_login: exports_external.string().nullable().optional(),
-  author_avatar_url: exports_external.string().nullable().optional(),
-  base_branch: exports_external.string().nullable().optional(),
-  head_branch: exports_external.string().nullable().optional(),
-  pr_number: exports_external.number().nullable().optional(),
-  commits: exports_external.number().nullable().optional(),
-  approved: exports_external.boolean().nullable().optional(),
-  reviewer_count: exports_external.number().nullable().optional(),
-  refreshed_at: exports_external.string().nullable().optional(),
-  stale_at: exports_external.string().nullable().optional()
-});
-var CoderChatSchema = exports_external.object({
-  id: ChatIdSchema,
-  owner_id: exports_external.string().uuid(),
-  workspace_id: exports_external.string().uuid().nullable().optional(),
-  parent_chat_id: exports_external.string().uuid().nullable().optional(),
-  root_chat_id: exports_external.string().uuid().nullable().optional(),
-  last_model_config_id: exports_external.string().uuid().nullable().optional(),
-  title: exports_external.string(),
-  status: ChatStatusSchema,
-  last_error: exports_external.string().nullable().optional(),
-  diff_status: ChatDiffStatusSchema.nullable().optional(),
-  created_at: exports_external.string(),
-  updated_at: exports_external.string(),
-  archived: exports_external.boolean().nullable().optional()
-});
-var CoderChatListResponseSchema = exports_external.array(CoderChatSchema);
-var ChatInputPartSchema = exports_external.object({
-  type: exports_external.literal("text"),
-  text: exports_external.string().min(1)
-});
-var CreateChatRequestSchema = exports_external.object({
-  organization_id: exports_external.string().uuid(),
-  content: exports_external.array(ChatInputPartSchema).min(1),
-  workspace_id: exports_external.string().uuid().optional(),
-  model_config_id: exports_external.string().uuid().optional(),
-  labels: exports_external.record(exports_external.string(), exports_external.string()).optional()
-});
-var CreateChatMessageRequestSchema = exports_external.object({
-  content: exports_external.array(ChatInputPartSchema).min(1),
-  model_config_id: exports_external.string().uuid().optional()
-});
-var CreateChatMessageResponseSchema = exports_external.object({
-  queued: exports_external.boolean()
-});
-var ChatErrorKindSchema = exports_external.enum([
-  "user_not_found",
-  "user_ambiguous",
-  "org_not_found",
-  "spend_exceeded",
-  "api_error",
-  "timeout"
-]);
-
-class CoderAPIError extends Error {
-  statusCode;
-  response;
-  kind;
-  constructor(message, statusCode, response, kind) {
-    super(message);
-    this.statusCode = statusCode;
-    this.response = response;
-    this.kind = kind;
-    this.name = "CoderAPIError";
-  }
-}
+// src/comment.ts
+var core = __toESM(require_core(), 1);
 
 // src/sanitize-label-key.ts
 var RESERVED_LABEL_KEYS = new Set([
@@ -26930,8 +26723,7 @@ function sanitizeLabelKey(input) {
 }
 
 // src/comment.ts
-var core = __toESM(require_core(), 1);
-var GITHUB_URL_REGEX = /([^/]+)\/([^/]+)\/(?:issues|pull)\/(\d+)/;
+var GITHUB_URL_REGEX = /([^/]+)\/([^/]+)\/(?:issues|pull)\/(\d+)\/?$/;
 var COMMENT_MARKER_PREFIX = "<!-- coder-agent-chat-action:";
 var COMMENT_MARKER_SUFFIX = " -->";
 function buildCommentMarker(key) {
@@ -27190,6 +26982,216 @@ function normalizeBaseUrl(coderURL) {
 }
 function buildDeploymentChatsUrl(coderURL) {
   return `${normalizeBaseUrl(coderURL)}/chats`;
+}
+
+// src/coder-client.ts
+class RealCoderClient {
+  serverURL;
+  headers;
+  constructor(serverURL, apiToken) {
+    this.serverURL = normalizeBaseUrl(serverURL);
+    this.headers = {
+      "Coder-Session-Token": apiToken,
+      "Content-Type": "application/json"
+    };
+  }
+  async request(endpoint, options) {
+    const url = `${this.serverURL}${endpoint}`;
+    const response = await fetch(url, {
+      ...options,
+      headers: { ...this.headers, ...options?.headers }
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new CoderAPIError(`Coder API error: ${response.statusText}`, response.status, body);
+    }
+    if (response.status === 204 || response.headers?.get("content-length") === "0") {
+      return;
+    }
+    return response.json();
+  }
+  async getCoderUserByGitHubId(githubUserId) {
+    if (githubUserId === undefined) {
+      throw new CoderAPIError("GitHub user ID cannot be undefined", 400);
+    }
+    if (githubUserId === 0) {
+      throw "GitHub user ID cannot be 0";
+    }
+    const filter = `github_com_user_id:${githubUserId}`;
+    const endpoint = `/api/v2/users?q=${encodeURIComponent(filter)}`;
+    const response = await this.request(endpoint);
+    const userList = CoderSDKGetUsersResponseSchema.parse(response);
+    const liveUsers = userList.users.filter((u) => u.deleted !== true);
+    if (liveUsers.length === 0) {
+      throw new CoderAPIError(`No Coder user found with GitHub user ID ${githubUserId}`, 404, undefined, "user_not_found");
+    }
+    if (liveUsers.length > 1) {
+      throw new CoderAPIError(`Multiple Coder users found with GitHub user ID ${githubUserId}`, 409, undefined, "user_ambiguous");
+    }
+    return CoderSDKUserSchema.parse(liveUsers[0]);
+  }
+  async getCoderUserByUsername(username) {
+    if (!username) {
+      throw new CoderAPIError("Coder username cannot be empty", 400);
+    }
+    const endpoint = `/api/v2/users/${encodeURIComponent(username)}`;
+    try {
+      const response = await this.request(endpoint);
+      return CoderSDKUserSchema.parse(response);
+    } catch (err) {
+      if (err instanceof CoderAPIError && err.statusCode === 404) {
+        throw new CoderAPIError(`No Coder user found with username "${username}"`, 404, err.response, "user_not_found");
+      }
+      throw err;
+    }
+  }
+  async getOrganizationByName(name) {
+    if (!name) {
+      throw new CoderAPIError("Organization name cannot be empty", 400);
+    }
+    const endpoint = `/api/v2/organizations/${encodeURIComponent(name)}`;
+    const response = await this.request(endpoint);
+    return CoderOrganizationSchema.parse(response);
+  }
+  async createChat(params) {
+    const endpoint = "/api/experimental/chats";
+    const response = await this.request(endpoint, {
+      method: "POST",
+      body: JSON.stringify(params)
+    });
+    return CoderChatSchema.parse(response);
+  }
+  async createChatMessage(chatId, params) {
+    const endpoint = `/api/experimental/chats/${encodeURIComponent(chatId)}/messages`;
+    const response = await this.request(endpoint, {
+      method: "POST",
+      body: JSON.stringify(params)
+    });
+    return CreateChatMessageResponseSchema.parse(response);
+  }
+  async getChat(chatId) {
+    const endpoint = `/api/experimental/chats/${encodeURIComponent(chatId)}`;
+    const response = await this.request(endpoint);
+    return CoderChatSchema.parse(response);
+  }
+  async listChats(opts) {
+    const params = [];
+    if (opts?.label !== undefined) {
+      const labels = Array.isArray(opts.label) ? opts.label : [opts.label];
+      for (const l of labels) {
+        params.push(`label=${encodeURIComponent(l)}`);
+      }
+    }
+    if (opts?.archived === false) {
+      params.push(`q=${encodeURIComponent("archived:false")}`);
+    }
+    const query = params.length ? `?${params.join("&")}` : "";
+    const endpoint = `/api/experimental/chats${query}`;
+    const response = await this.request(endpoint);
+    const parsed = CoderChatListResponseSchema.parse(response);
+    return parsed;
+  }
+}
+var ChatIdSchema = exports_external.string().uuid().brand("ChatId");
+var CoderSDKUserSchema = exports_external.object({
+  id: exports_external.string().uuid(),
+  username: exports_external.string(),
+  email: exports_external.string().email(),
+  organization_ids: exports_external.array(exports_external.string().uuid()),
+  github_com_user_id: exports_external.number().optional(),
+  deleted: exports_external.boolean().optional()
+});
+var CoderSDKGetUsersResponseSchema = exports_external.object({
+  users: exports_external.array(CoderSDKUserSchema)
+});
+var CoderOrganizationSchema = exports_external.object({
+  id: exports_external.string().uuid(),
+  name: exports_external.string(),
+  display_name: exports_external.string().optional()
+});
+var ChatStatusSchema = exports_external.enum([
+  "waiting",
+  "pending",
+  "running",
+  "paused",
+  "completed",
+  "error"
+]);
+var ChatDiffStatusSchema = exports_external.object({
+  chat_id: exports_external.string().uuid(),
+  url: exports_external.string().nullable().optional(),
+  pull_request_state: exports_external.string().nullable().optional(),
+  pull_request_title: exports_external.string().nullable().optional(),
+  pull_request_draft: exports_external.boolean().default(false),
+  changes_requested: exports_external.boolean().default(false),
+  additions: exports_external.number().default(0),
+  deletions: exports_external.number().default(0),
+  changed_files: exports_external.number().default(0),
+  author_login: exports_external.string().nullable().optional(),
+  author_avatar_url: exports_external.string().nullable().optional(),
+  base_branch: exports_external.string().nullable().optional(),
+  head_branch: exports_external.string().nullable().optional(),
+  pr_number: exports_external.number().nullable().optional(),
+  commits: exports_external.number().nullable().optional(),
+  approved: exports_external.boolean().nullable().optional(),
+  reviewer_count: exports_external.number().nullable().optional(),
+  refreshed_at: exports_external.string().nullable().optional(),
+  stale_at: exports_external.string().nullable().optional()
+});
+var CoderChatSchema = exports_external.object({
+  id: ChatIdSchema,
+  owner_id: exports_external.string().uuid(),
+  workspace_id: exports_external.string().uuid().nullable().optional(),
+  parent_chat_id: exports_external.string().uuid().nullable().optional(),
+  root_chat_id: exports_external.string().uuid().nullable().optional(),
+  last_model_config_id: exports_external.string().uuid().nullable().optional(),
+  title: exports_external.string(),
+  status: ChatStatusSchema,
+  last_error: exports_external.string().nullable().optional(),
+  diff_status: ChatDiffStatusSchema.nullable().optional(),
+  created_at: exports_external.string(),
+  updated_at: exports_external.string(),
+  archived: exports_external.boolean().nullable().optional()
+});
+var CoderChatListResponseSchema = exports_external.array(CoderChatSchema);
+var ChatInputPartSchema = exports_external.object({
+  type: exports_external.literal("text"),
+  text: exports_external.string().min(1)
+});
+var CreateChatRequestSchema = exports_external.object({
+  organization_id: exports_external.string().uuid(),
+  content: exports_external.array(ChatInputPartSchema).min(1),
+  workspace_id: exports_external.string().uuid().optional(),
+  model_config_id: exports_external.string().uuid().optional(),
+  labels: exports_external.record(exports_external.string(), exports_external.string()).optional()
+});
+var CreateChatMessageRequestSchema = exports_external.object({
+  content: exports_external.array(ChatInputPartSchema).min(1),
+  model_config_id: exports_external.string().uuid().optional()
+});
+var CreateChatMessageResponseSchema = exports_external.object({
+  queued: exports_external.boolean()
+});
+var ChatErrorKindSchema = exports_external.enum([
+  "user_not_found",
+  "user_ambiguous",
+  "org_not_found",
+  "spend_exceeded",
+  "api_error",
+  "timeout"
+]);
+
+class CoderAPIError extends Error {
+  statusCode;
+  response;
+  kind;
+  constructor(message, statusCode, response, kind) {
+    super(message);
+    this.statusCode = statusCode;
+    this.response = response;
+    this.kind = kind;
+    this.name = "CoderAPIError";
+  }
 }
 
 // src/action.ts
@@ -27578,7 +27580,7 @@ class CoderAgentChatAction {
     core2.info(`Coder username: ${coderUsername}`);
     if (this.inputs.existingChatId) {
       core2.info(`Sending message to existing chat: ${this.inputs.existingChatId}`);
-      const chatId = this.inputs.existingChatId;
+      const chatId = ChatIdSchema.parse(this.inputs.existingChatId);
       await this.coder.createChatMessage(chatId, {
         content: [{ type: "text", text: this.inputs.chatPrompt }],
         model_config_id: this.inputs.modelConfigId
@@ -27798,7 +27800,7 @@ var ActionInputsObjectSchema = exports_external.object({
   coderURL: exports_external.string().url(),
   coderOrganization: exports_external.string().min(1).optional(),
   githubURL: exports_external.string().url(),
-  githubToken: exports_external.string(),
+  githubToken: exports_external.string().min(1),
   githubUserID: exports_external.number().int().positive().optional(),
   coderUsername: exports_external.string().min(1).optional(),
   workspaceId: exports_external.string().uuid().optional(),
@@ -27890,7 +27892,6 @@ async function main() {
       core4.setFailed("Unknown error occurred");
       console.error("Unknown error:", error3);
     }
-    process.exit(1);
   }
 }
 main();
