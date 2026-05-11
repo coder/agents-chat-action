@@ -2,6 +2,7 @@ var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 function __accessProp(key) {
   return this[key];
@@ -28,6 +29,23 @@ var __toESM = (mod, isNodeMode, target) => {
     cache.set(mod, to);
   return to;
 };
+var __toCommonJS = (from) => {
+  var entry = (__moduleCache ??= new WeakMap).get(from), desc;
+  if (entry)
+    return entry;
+  entry = __defProp({}, "__esModule", { value: true });
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (var key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(entry, key))
+        __defProp(entry, key, {
+          get: __accessProp.bind(from, key),
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
+        });
+  }
+  __moduleCache.set(from, entry);
+  return entry;
+};
+var __moduleCache;
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
 var __returnValue = (v) => v;
 function __exportSetter(name, newValue) {
@@ -19110,7 +19128,7 @@ var require_before_after_hook = __commonJS((exports2, module2) => {
 // node_modules/@octokit/endpoint/dist-node/index.js
 var require_dist_node2 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -19121,16 +19139,16 @@ var require_dist_node2 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var dist_src_exports = {};
   __export2(dist_src_exports, {
     endpoint: () => endpoint
   });
-  module2.exports = __toCommonJS(dist_src_exports);
+  module2.exports = __toCommonJS2(dist_src_exports);
   var import_universal_user_agent = require_dist_node();
   var VERSION = "9.0.6";
   var userAgent = `octokit-endpoint.js/${VERSION} ${(0, import_universal_user_agent.getUserAgent)()}`;
@@ -19524,7 +19542,7 @@ var require_once = __commonJS((exports2, module2) => {
 var require_dist_node4 = __commonJS((exports2, module2) => {
   var __create2 = Object.create;
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __getProtoOf2 = Object.getPrototypeOf;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
@@ -19536,17 +19554,17 @@ var require_dist_node4 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
     }
     return to;
   };
   var __toESM2 = (mod, isNodeMode, target) => (target = mod != null ? __create2(__getProtoOf2(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp2(target, "default", { value: mod, enumerable: true }) : target, mod));
-  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var dist_src_exports = {};
   __export2(dist_src_exports, {
     RequestError: () => RequestError
   });
-  module2.exports = __toCommonJS(dist_src_exports);
+  module2.exports = __toCommonJS2(dist_src_exports);
   var import_deprecation = require_dist_node3();
   var import_once = __toESM2(require_once());
   var logOnceCode = (0, import_once.default)((deprecation) => console.warn(deprecation));
@@ -19594,7 +19612,7 @@ var require_dist_node4 = __commonJS((exports2, module2) => {
 // node_modules/@octokit/request/dist-node/index.js
 var require_dist_node5 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -19605,16 +19623,16 @@ var require_dist_node5 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var dist_src_exports = {};
   __export2(dist_src_exports, {
     request: () => request
   });
-  module2.exports = __toCommonJS(dist_src_exports);
+  module2.exports = __toCommonJS2(dist_src_exports);
   var import_endpoint = require_dist_node2();
   var import_universal_user_agent = require_dist_node();
   var VERSION = "8.4.1";
@@ -19793,7 +19811,7 @@ var require_dist_node5 = __commonJS((exports2, module2) => {
 // node_modules/@octokit/graphql/dist-node/index.js
 var require_dist_node6 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -19804,18 +19822,18 @@ var require_dist_node6 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var index_exports = {};
   __export2(index_exports, {
     GraphqlResponseError: () => GraphqlResponseError,
     graphql: () => graphql2,
     withCustomRequest: () => withCustomRequest
   });
-  module2.exports = __toCommonJS(index_exports);
+  module2.exports = __toCommonJS2(index_exports);
   var import_request3 = require_dist_node5();
   var import_universal_user_agent = require_dist_node();
   var VERSION = "7.1.1";
@@ -19917,7 +19935,7 @@ var require_dist_node6 = __commonJS((exports2, module2) => {
 // node_modules/@octokit/auth-token/dist-node/index.js
 var require_dist_node7 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -19928,16 +19946,16 @@ var require_dist_node7 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var dist_src_exports = {};
   __export2(dist_src_exports, {
     createTokenAuth: () => createTokenAuth
   });
-  module2.exports = __toCommonJS(dist_src_exports);
+  module2.exports = __toCommonJS2(dist_src_exports);
   var REGEX_IS_INSTALLATION_LEGACY = /^v1\./;
   var REGEX_IS_INSTALLATION = /^ghs_/;
   var REGEX_IS_USER_TO_SERVER = /^ghu_/;
@@ -19980,7 +19998,7 @@ var require_dist_node7 = __commonJS((exports2, module2) => {
 // node_modules/@octokit/core/dist-node/index.js
 var require_dist_node8 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -19991,16 +20009,16 @@ var require_dist_node8 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var index_exports = {};
   __export2(index_exports, {
     Octokit: () => Octokit
   });
-  module2.exports = __toCommonJS(index_exports);
+  module2.exports = __toCommonJS2(index_exports);
   var import_universal_user_agent = require_dist_node();
   var import_before_after_hook = require_before_after_hook();
   var import_request = require_dist_node5();
@@ -20116,7 +20134,7 @@ var require_dist_node8 = __commonJS((exports2, module2) => {
 // node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js
 var require_dist_node9 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -20127,17 +20145,17 @@ var require_dist_node9 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var dist_src_exports = {};
   __export2(dist_src_exports, {
     legacyRestEndpointMethods: () => legacyRestEndpointMethods,
     restEndpointMethods: () => restEndpointMethods
   });
-  module2.exports = __toCommonJS(dist_src_exports);
+  module2.exports = __toCommonJS2(dist_src_exports);
   var VERSION = "10.4.1";
   var Endpoints = {
     actions: {
@@ -22253,7 +22271,7 @@ var require_dist_node9 = __commonJS((exports2, module2) => {
 // node_modules/@octokit/plugin-paginate-rest/dist-node/index.js
 var require_dist_node10 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -22264,11 +22282,11 @@ var require_dist_node10 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var dist_src_exports = {};
   __export2(dist_src_exports, {
     composePaginateRest: () => composePaginateRest,
@@ -22276,7 +22294,7 @@ var require_dist_node10 = __commonJS((exports2, module2) => {
     paginateRest: () => paginateRest,
     paginatingEndpoints: () => paginatingEndpoints
   });
-  module2.exports = __toCommonJS(dist_src_exports);
+  module2.exports = __toCommonJS2(dist_src_exports);
   var VERSION = "9.2.2";
   function normalizePaginatedListResponse(response) {
     if (!response.data) {
@@ -22726,6 +22744,11 @@ var require_github = __commonJS((exports2) => {
 });
 
 // src/index.ts
+var exports_src = {};
+__export(exports_src, {
+  parseGithubUserID: () => parseGithubUserID
+});
+module.exports = __toCommonJS(exports_src);
 var core4 = __toESM(require_core(), 1);
 var github = __toESM(require_github(), 1);
 
@@ -27843,10 +27866,16 @@ var ActionOutputsSchema = exports_external.object({
 });
 
 // src/index.ts
+function parseGithubUserID(raw) {
+  if (!raw)
+    return;
+  if (!/^\d+$/.test(raw))
+    return Number.NaN;
+  return Number(raw);
+}
 async function main() {
   try {
-    const githubUserIdInput = core4.getInput("github-user-id");
-    const githubUserID = githubUserIdInput ? Number(githubUserIdInput) : undefined;
+    const githubUserID = parseGithubUserID(core4.getInput("github-user-id"));
     const inputs = ActionInputsSchema.parse({
       coderURL: core4.getInput("coder-url", { required: true }),
       coderToken: core4.getInput("coder-token", { required: true }),
@@ -27893,4 +27922,6 @@ async function main() {
     process.exit(1);
   }
 }
-main();
+if (require.main == module) {
+  main();
+}
