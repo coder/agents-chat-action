@@ -1,6 +1,10 @@
 import * as core from "@actions/core";
 import type { getOctokit } from "@actions/github";
-import { type ChatErrorKind, CoderAPIError } from "./coder-client";
+import {
+	type ChatErrorKind,
+	type ChatStatus,
+	CoderAPIError,
+} from "./coder-client";
 import type { ActionInputs } from "./schemas";
 
 type Octokit = ReturnType<typeof getOctokit>;
@@ -200,17 +204,35 @@ function formatMicrosAsDollars(micros: number): string {
 export interface FailureCommentContext {
 	chatsUrl: string;
 	marker: string;
+	// Chat-specific URL when the failure surfaced after the chat existed
+	// (timeout, error-state terminal, polling-network blip). Flips the
+	// heading to the run-phase "failed".
+	chatUrl?: string;
+	// Final chat status when the failure carries a chat handle. `"error"`
+	// means the chat itself errored; the `api_error` body uses this to hint
+	// at `last_error` rather than connectivity.
+	chatStatus?: ChatStatus;
 }
 
 // Build the failure-comment body. Each variant ends with `ctx.marker` so
 // subsequent runs can find and update the prior comment via
 // `upsertCommentByMarker`. The exhaustive `default` makes adding a new
 // ChatErrorKind a type error here rather than a silent blank body.
+//
+// Heading branches on creation phase vs run phase: "failed to start" when
+// no chat existed yet, "failed" when one did (`isRunPhaseFailure`).
 export function buildFailureCommentBody(
 	detail: FailureDetail,
 	ctx: FailureCommentContext,
 ): string {
-	const lines: string[] = ["**Coder Agent Chat: failed to start**", ""];
+	const runPhase = isRunPhaseFailure(detail.kind, ctx);
+	const heading = runPhase
+		? "**Coder Agent Chat: failed**"
+		: "**Coder Agent Chat: failed to start**";
+	const lines: string[] = [heading, ""];
+	const linkLine = ctx.chatUrl
+		? `View the chat in the Coder deployment: ${ctx.chatUrl}`
+		: `View chats in the Coder deployment: ${ctx.chatsUrl}`;
 	switch (detail.kind) {
 		case "spend_exceeded":
 			lines.push(
@@ -224,7 +246,7 @@ export function buildFailureCommentBody(
 			if (detail.resetsAt) {
 				lines.push(`- Resets at: ${detail.resetsAt}`);
 			}
-			lines.push("", `View chats in the Coder deployment: ${ctx.chatsUrl}`);
+			lines.push("", linkLine);
 			break;
 		case "user_not_found":
 			lines.push(
@@ -235,7 +257,7 @@ export function buildFailureCommentBody(
 				`- chat-error-kind=${detail.kind}`,
 				`- Detail: ${detail.message}`,
 				"",
-				`View chats in the Coder deployment: ${ctx.chatsUrl}`,
+				linkLine,
 			);
 			break;
 		case "user_ambiguous":
@@ -247,7 +269,7 @@ export function buildFailureCommentBody(
 				`- chat-error-kind=${detail.kind}`,
 				`- Detail: ${detail.message}`,
 				"",
-				`View chats in the Coder deployment: ${ctx.chatsUrl}`,
+				linkLine,
 			);
 			break;
 		case "org_not_found":
@@ -258,20 +280,27 @@ export function buildFailureCommentBody(
 				`- chat-error-kind=${detail.kind}`,
 				`- Detail: ${detail.message}`,
 				"",
-				`View chats in the Coder deployment: ${ctx.chatsUrl}`,
+				linkLine,
 			);
 			break;
 		case "api_error":
+			lines.push(apiErrorPhrase(runPhase, ctx), "");
 			lines.push(
-				"An unexpected error occurred while running the action.",
-				"",
 				`- chat-error-kind=${detail.kind}`,
 				`- Detail: ${detail.message}`,
-				"",
-				`View chats in the Coder deployment: ${ctx.chatsUrl}`,
 			);
+			if (ctx.chatStatus === "error") {
+				lines.push(
+					"- Hint: the agent itself failed mid-run; inspect " +
+						"`last_error` on the chat (e.g. provider rate limits) " +
+						"rather than action connectivity.",
+				);
+			}
+			lines.push("", linkLine);
 			break;
 		case "timeout":
+			// timeout fires only from `waitForTerminal`, which runs after
+			// chat creation; always run-phase.
 			lines.push(
 				"`wait: complete` polling did not reach a terminal status within " +
 					"`wait-timeout-seconds`.",
@@ -279,7 +308,7 @@ export function buildFailureCommentBody(
 				`- chat-error-kind=${detail.kind}`,
 				`- Detail: ${detail.message}`,
 				"",
-				`View chats in the Coder deployment: ${ctx.chatsUrl}`,
+				linkLine,
 			);
 			break;
 		default: {
@@ -289,6 +318,120 @@ export function buildFailureCommentBody(
 			);
 		}
 	}
+	lines.push("", ctx.marker);
+	return lines.join("\n");
+}
+
+function isRunPhaseFailure(
+	kind: ChatErrorKind,
+	ctx: FailureCommentContext,
+): boolean {
+	if (kind === "timeout") {
+		return true;
+	}
+	// `api_error` split: classification cannot tell creation 4xx from
+	// polling 5xx by kind alone. `ctx.chatUrl` is the signal: polling
+	// always carries it; creation never does.
+	if (kind === "api_error" && ctx.chatUrl) {
+		return true;
+	}
+	return false;
+}
+
+// Pick the `api_error` lead-in: creation (no chatUrl) blames inputs/
+// connectivity; run-phase + chatStatus="error" blames the chat's
+// last_error; run-phase, other status, blames polling connectivity.
+function apiErrorPhrase(runPhase: boolean, ctx: FailureCommentContext): string {
+	if (!runPhase) {
+		return "An unexpected error occurred while running the action.";
+	}
+	if (ctx.chatStatus === "error") {
+		return "The chat ran and ended in an error state.";
+	}
+	return "The Coder API returned an unexpected error while polling the chat.";
+}
+
+export interface SuccessCommentContext {
+	chatUrl: string;
+	// Undefined when the chat object could not be fetched (existing-chat-id
+	// + wait=none + getChat failed); body omits the Status line rather than
+	// rendering a literal "unknown".
+	chatStatus: ChatStatus | undefined;
+	marker: string;
+	waitMode: "none" | "complete";
+	// True when this run created the chat; false on the existing-chat-id
+	// follow-up path. Drives the wait=none heading.
+	chatCreated: boolean;
+	// Diff fields populated only on wait=complete; the at-creation snapshot
+	// has no real diff yet.
+	pullRequestUrl?: string;
+	additions?: number;
+	deletions?: number;
+	changedFiles?: number;
+}
+
+// Build the success-path comment body. Shares the marker with the failure
+// path so re-runs accumulate in one comment per target.
+//
+// Heading variants:
+//   wait=complete + completed: "Coder Agent Chat: completed".
+//   wait=complete + waiting: ambiguous phrasing (`waiting` conflates
+//     "done" with "awaiting input").
+//   wait=none + chatCreated: "created".
+//   wait=none + !chatCreated: "message sent" (follow-up path).
+//
+// Per-chat spend is omitted; the chats API only exposes per-user spend,
+// which is misleading at per-chat granularity.
+export function buildSuccessCommentBody(ctx: SuccessCommentContext): string {
+	const lines: string[] = [];
+
+	if (ctx.waitMode === "complete" && ctx.chatStatus === "waiting") {
+		// `waiting` conflates "done" and "awaiting input"; do not claim
+		// completion.
+		lines.push("**Coder Agent Chat: agent finished or is awaiting input**");
+	} else if (ctx.waitMode === "complete" && ctx.chatStatus !== undefined) {
+		lines.push(`**Coder Agent Chat: ${ctx.chatStatus}**`);
+	} else if (ctx.waitMode === "complete") {
+		// Safety net: waitForTerminal always returns a chat or throws, so
+		// this branch should be unreachable today.
+		lines.push("**Coder Agent Chat: complete**");
+	} else if (ctx.chatCreated) {
+		lines.push("**Coder Agent Chat: created**");
+	} else {
+		lines.push("**Coder Agent Chat: message sent**");
+	}
+
+	lines.push("", `Chat: ${ctx.chatUrl}`);
+	if (ctx.chatStatus !== undefined) {
+		lines.push(`Status: ${ctx.chatStatus}`);
+	}
+
+	// Diff fields render only on wait=complete; the at-creation snapshot
+	// has no real diff. Each field is gated independently because the
+	// chats API may populate some but not others.
+	if (ctx.waitMode === "complete") {
+		if (ctx.pullRequestUrl) {
+			lines.push(`Pull request: ${ctx.pullRequestUrl}`);
+		}
+		if (
+			typeof ctx.additions === "number" ||
+			typeof ctx.deletions === "number" ||
+			typeof ctx.changedFiles === "number"
+		) {
+			const parts: string[] = [];
+			if (typeof ctx.additions === "number") {
+				parts.push(`+${ctx.additions} additions`);
+			}
+			if (typeof ctx.deletions === "number") {
+				parts.push(`-${ctx.deletions} deletions`);
+			}
+			if (typeof ctx.changedFiles === "number") {
+				parts.push(`${ctx.changedFiles} files changed`);
+			}
+			lines.push(`Diff: ${parts.join(", ")}`);
+		}
+	}
+
 	lines.push("", ctx.marker);
 	return lines.join("\n");
 }

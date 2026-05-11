@@ -26979,33 +26979,98 @@ function formatMicrosAsDollars(micros) {
   return `$${dollars.toFixed(2)}`;
 }
 function buildFailureCommentBody(detail, ctx) {
-  const lines = ["**Coder Agent Chat: failed to start**", ""];
+  const runPhase = isRunPhaseFailure(detail.kind, ctx);
+  const heading = runPhase ? "**Coder Agent Chat: failed**" : "**Coder Agent Chat: failed to start**";
+  const lines = [heading, ""];
+  const linkLine = ctx.chatUrl ? `View the chat in the Coder deployment: ${ctx.chatUrl}` : `View chats in the Coder deployment: ${ctx.chatsUrl}`;
   switch (detail.kind) {
     case "spend_exceeded":
       lines.push("The Coder deployment's chat spend limit was reached, so this " + "chat could not be created.", "", `- chat-error-kind=${detail.kind}`, `- Spent: ${formatMicrosAsDollars(detail.spentMicros)}`, `- Limit: ${formatMicrosAsDollars(detail.limitMicros)}`);
       if (detail.resetsAt) {
         lines.push(`- Resets at: ${detail.resetsAt}`);
       }
-      lines.push("", `View chats in the Coder deployment: ${ctx.chatsUrl}`);
+      lines.push("", linkLine);
       break;
     case "user_not_found":
-      lines.push("No Coder user could be resolved for this run. Adjust either " + "the `github-user-id` input (the GitHub identity is not linked " + "to a Coder user) or pass `coder-username` directly.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", `View chats in the Coder deployment: ${ctx.chatsUrl}`);
+      lines.push("No Coder user could be resolved for this run. Adjust either " + "the `github-user-id` input (the GitHub identity is not linked " + "to a Coder user) or pass `coder-username` directly.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", linkLine);
       break;
     case "user_ambiguous":
-      lines.push("Multiple Coder users matched the GitHub identity. Set the " + "`coder-username` input to the specific account this workflow " + "should run as.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", `View chats in the Coder deployment: ${ctx.chatsUrl}`);
+      lines.push("Multiple Coder users matched the GitHub identity. Set the " + "`coder-username` input to the specific account this workflow " + "should run as.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", linkLine);
       break;
     case "org_not_found":
-      lines.push("The resolved Coder user has no matching organization. Set the " + "`coder-organization` input or grant the user a membership.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", `View chats in the Coder deployment: ${ctx.chatsUrl}`);
+      lines.push("The resolved Coder user has no matching organization. Set the " + "`coder-organization` input or grant the user a membership.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", linkLine);
       break;
     case "api_error":
-      lines.push("An unexpected error occurred while running the action.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", `View chats in the Coder deployment: ${ctx.chatsUrl}`);
+      lines.push(apiErrorPhrase(runPhase, ctx), "");
+      lines.push(`- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`);
+      if (ctx.chatStatus === "error") {
+        lines.push("- Hint: the agent itself failed mid-run; inspect " + "`last_error` on the chat (e.g. provider rate limits) " + "rather than action connectivity.");
+      }
+      lines.push("", linkLine);
       break;
     case "timeout":
-      lines.push("`wait: complete` polling did not reach a terminal status within " + "`wait-timeout-seconds`.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", `View chats in the Coder deployment: ${ctx.chatsUrl}`);
+      lines.push("`wait: complete` polling did not reach a terminal status within " + "`wait-timeout-seconds`.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", linkLine);
       break;
     default: {
       const _exhaustive = detail;
       throw new Error(`buildFailureCommentBody: unhandled ChatErrorKind ${JSON.stringify(_exhaustive)}`);
+    }
+  }
+  lines.push("", ctx.marker);
+  return lines.join(`
+`);
+}
+function isRunPhaseFailure(kind, ctx) {
+  if (kind === "timeout") {
+    return true;
+  }
+  if (kind === "api_error" && ctx.chatUrl) {
+    return true;
+  }
+  return false;
+}
+function apiErrorPhrase(runPhase, ctx) {
+  if (!runPhase) {
+    return "An unexpected error occurred while running the action.";
+  }
+  if (ctx.chatStatus === "error") {
+    return "The chat ran and ended in an error state.";
+  }
+  return "The Coder API returned an unexpected error while polling the chat.";
+}
+function buildSuccessCommentBody(ctx) {
+  const lines = [];
+  if (ctx.waitMode === "complete" && ctx.chatStatus === "waiting") {
+    lines.push("**Coder Agent Chat: agent finished or is awaiting input**");
+  } else if (ctx.waitMode === "complete" && ctx.chatStatus !== undefined) {
+    lines.push(`**Coder Agent Chat: ${ctx.chatStatus}**`);
+  } else if (ctx.waitMode === "complete") {
+    lines.push("**Coder Agent Chat: complete**");
+  } else if (ctx.chatCreated) {
+    lines.push("**Coder Agent Chat: created**");
+  } else {
+    lines.push("**Coder Agent Chat: message sent**");
+  }
+  lines.push("", `Chat: ${ctx.chatUrl}`);
+  if (ctx.chatStatus !== undefined) {
+    lines.push(`Status: ${ctx.chatStatus}`);
+  }
+  if (ctx.waitMode === "complete") {
+    if (ctx.pullRequestUrl) {
+      lines.push(`Pull request: ${ctx.pullRequestUrl}`);
+    }
+    if (typeof ctx.additions === "number" || typeof ctx.deletions === "number" || typeof ctx.changedFiles === "number") {
+      const parts = [];
+      if (typeof ctx.additions === "number") {
+        parts.push(`+${ctx.additions} additions`);
+      }
+      if (typeof ctx.deletions === "number") {
+        parts.push(`-${ctx.deletions} deletions`);
+      }
+      if (typeof ctx.changedFiles === "number") {
+        parts.push(`${ctx.changedFiles} files changed`);
+      }
+      lines.push(`Diff: ${parts.join(", ")}`);
     }
   }
   lines.push("", ctx.marker);
@@ -27186,15 +27251,29 @@ class CoderAgentChatAction {
   generateChatUrl(chatId) {
     return `${normalizeBaseUrl(this.inputs.coderURL)}/chats/${chatId}`;
   }
-  async commentOnIssue(chatUrl, owner, repo, issueNumber) {
-    const body = `Agent chat: ${chatUrl}`;
-    await upsertComment({
+  async commentOnIssue(args) {
+    const workflow = process.env.GITHUB_WORKFLOW || undefined;
+    const marker = buildCommentMarker(deriveCommentKey({ ...this.inputs, workflow }));
+    const diff = args.chat?.diff_status;
+    const hasPR = diff?.pr_number != null;
+    const body = buildSuccessCommentBody({
+      chatUrl: args.chatUrl,
+      chatStatus: args.chat?.status,
+      marker,
+      waitMode: this.inputs.wait === "complete" ? "complete" : "none",
+      chatCreated: args.chatCreated,
+      pullRequestUrl: hasPR ? diff?.url ?? undefined : undefined,
+      additions: hasPR ? diff?.additions ?? undefined : undefined,
+      deletions: hasPR ? diff?.deletions ?? undefined : undefined,
+      changedFiles: hasPR ? diff?.changed_files ?? undefined : undefined
+    });
+    await upsertCommentByMarker({
       octokit: this.octokit,
-      owner,
-      repo,
-      issueNumber,
+      owner: args.owner,
+      repo: args.repo,
+      issueNumber: args.issueNumber,
       body,
-      predicate: (comment) => comment.body?.startsWith("Agent chat:") ?? false
+      marker
     });
   }
   warnUnwiredInputs() {
@@ -27384,7 +27463,9 @@ class CoderAgentChatAction {
     const marker = buildCommentMarker(deriveCommentKey({ ...this.inputs, workflow }));
     const body = buildFailureCommentBody(detail, {
       chatsUrl: buildDeploymentChatsUrl(this.inputs.coderURL),
-      marker
+      marker,
+      chatUrl: failure.chatUrl,
+      chatStatus: failure.chat?.status
     });
     await upsertCommentByMarker({
       octokit: this.octokit,
@@ -27428,7 +27509,14 @@ class CoderAgentChatAction {
       }
       if (this.inputs.commentOnIssue) {
         core2.info(`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`);
-        await this.commentOnIssue(chatUrl2, githubOrg, githubRepo, githubIssueNumber);
+        await this.commentOnIssue({
+          chatUrl: chatUrl2,
+          owner: githubOrg,
+          repo: githubRepo,
+          issueNumber: githubIssueNumber,
+          chatCreated: false,
+          chat
+        });
       }
       if (chat) {
         return this.buildOutputs(coderUsername, chat, false);
@@ -27462,7 +27550,14 @@ class CoderAgentChatAction {
     }
     if (this.inputs.commentOnIssue) {
       core2.info(`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`);
-      await this.commentOnIssue(chatUrl, githubOrg, githubRepo, githubIssueNumber);
+      await this.commentOnIssue({
+        chatUrl,
+        owner: githubOrg,
+        repo: githubRepo,
+        issueNumber: githubIssueNumber,
+        chatCreated: true,
+        chat: finalChat
+      });
     } else {
       core2.info("Skipping comment on issue (commentOnIssue is false)");
     }

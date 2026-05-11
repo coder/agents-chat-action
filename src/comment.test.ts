@@ -4,12 +4,14 @@ import {
 	buildCommentMarker,
 	buildDeploymentChatsUrl,
 	buildFailureCommentBody,
+	buildSuccessCommentBody,
 	type ChatErrorKind,
 	classifyError,
 	deriveCommentKey,
 	type FailureDetail,
 	findCommentByPredicate,
 	normalizeBaseUrl,
+	type SuccessCommentContext,
 } from "./comment";
 
 // ChatErrorKind must mirror FailureDetail's discriminator so adding a kind
@@ -100,8 +102,8 @@ describe("deriveCommentKey", () => {
 
 describe("classifyError", () => {
 	test("maps the 409 spend-exceeded JSON shape from coder/coder", () => {
-		// Shape from coderd/exp_chats.go writeChatUsageLimitExceeded
-		// serializing codersdk.ChatUsageLimitExceededResponse: a JSON body
+		// The shape is locked by coderd/exp_chats.go writeChatUsageLimitExceeded
+		// which serializes codersdk.ChatUsageLimitExceededResponse: a JSON body
 		// with `message`, `spent_micros`, `limit_micros`, `resets_at` returned
 		// alongside HTTP 409.
 		const err = new CoderAPIError(
@@ -152,18 +154,19 @@ describe("classifyError", () => {
 		expect(result.kind).toBe("api_error");
 	});
 
-	// 409 with neither the spend-exceeded body nor a user-* error code (a
-	// generic conflict) must fall through to api_error rather than being
-	// silently misclassified by a future loosening of `parseSpendExceededBody`.
+	// 409 with neither the spend-exceeded body nor a user-* error code
+	// (a generic conflict) must fall through to api_error rather than
+	// being silently misclassified by a future loosening of
+	// parseSpendExceededBody.
 	test("falls back to api_error for 409 without spend body or error code", () => {
 		const err = new CoderAPIError("some other conflict", 409);
 		const result = classifyError(err);
 		expect(result.kind).toBe("api_error");
 	});
 
-	// `api_error` must surface the diagnostic `message` from the response
-	// body when one is present, not the HTTP status text wrapper. This is
-	// the difference between
+	// api_error must surface the diagnostic `message` from the response
+	// body when one is present, not the HTTP status text wrapper.
+	// This is the difference between
 	//   Detail: workspace_id: must be a valid UUID
 	// and
 	//   Detail: Coder API error: Bad Request
@@ -194,10 +197,10 @@ describe("classifyError", () => {
 		expect(result.message).toBe("connection refused");
 	});
 
-	// `kind` takes precedence over the spend-exceeded body shape so the
+	// errorCode takes precedence over the spend-exceeded body shape so the
 	// classifier never silently misclassifies a user-lookup error that
 	// happens to ride a 409 with a spend-shaped body.
-	test("kind takes precedence over a spend-shaped 409 body", () => {
+	test("errorCode takes precedence over a spend-shaped 409 body", () => {
 		const err = new CoderAPIError(
 			"Multiple Coder users found with GitHub user ID 12345",
 			409,
@@ -268,8 +271,9 @@ describe("buildFailureCommentBody", () => {
 		expect(body.endsWith(marker)).toBe(true);
 	});
 
-	// `org_not_found` is in the enum but no current code path produces it.
-	// This test exercises the body so the branch stays in coverage.
+	// org_not_found is part of the chat-error-kind enum but no production
+	// code path classifies into it yet; the branch is exercised here so
+	// the body shape is pinned for future callers.
 	test("org_not_found body names coder-organization and ends with marker", () => {
 		const detail: FailureDetail = {
 			kind: "org_not_found",
@@ -280,6 +284,109 @@ describe("buildFailureCommentBody", () => {
 		expect(body).toContain("coder-organization");
 		expect(body.endsWith(marker)).toBe(true);
 	});
+	test(
+		"timeout body includes the kind, the detail message (chatId text), " +
+			"and uses the run-phase heading",
+		() => {
+			const detail: FailureDetail = {
+				kind: "timeout",
+				message:
+					"Polling chat 990e8400-e29b-41d4-a716-446655440000 timed out " +
+					"after 600s waiting for a terminal status",
+			};
+			const chatUrl =
+				"https://coder.test/chats/990e8400-e29b-41d4-a716-446655440000";
+			const body = buildFailureCommentBody(detail, {
+				chatsUrl,
+				chatUrl,
+				marker,
+			});
+			expect(body).toContain("chat-error-kind=timeout");
+			expect(body).toContain("600s");
+			expect(body).toContain("990e8400-e29b-41d4-a716-446655440000");
+			// Run-phase heading: the chat ran for some time, did not fail
+			// to start. "failed to start" would mislead the operator.
+			expect(body).toContain("**Coder Agent Chat: failed**");
+			expect(body).not.toContain("failed to start");
+			// Chat-specific link, not the deployment chats list.
+			expect(body).toContain(chatUrl);
+			expect(body.endsWith(marker)).toBe(true);
+		},
+	);
+
+	test(
+		"api_error with chatUrl renders the run-phase heading and body " +
+			"phrasing (polling failure, not creation)",
+		() => {
+			const detail: FailureDetail = {
+				kind: "api_error",
+				message:
+					"Polling chat 990e8400-e29b-41d4-a716-446655440000 failed: " +
+					"connection reset by peer",
+			};
+			const chatUrl =
+				"https://coder.test/chats/990e8400-e29b-41d4-a716-446655440000";
+			const body = buildFailureCommentBody(detail, {
+				chatsUrl,
+				chatUrl,
+				marker,
+			});
+			expect(body).toContain("**Coder Agent Chat: failed**");
+			expect(body).not.toContain("failed to start");
+			expect(body).not.toContain("while creating the chat");
+			expect(body).toContain("while polling the chat");
+			expect(body).toContain(chatUrl);
+			expect(body.endsWith(marker)).toBe(true);
+		},
+	);
+
+	test(
+		"api_error with chatStatus=error renders the chat-ran-and-errored " +
+			"phrasing, distinct from polling-network failure",
+		() => {
+			// When `throwOnChatError` throws because chat.status === "error",
+			// the API call succeeded but the chat itself errored. The body
+			// should point the operator at last_error rather than
+			// connectivity. ctx.chatStatus drives the branch.
+			const detail: FailureDetail = {
+				kind: "api_error",
+				message: "Anthropic 429 rate limit",
+			};
+			const chatUrl =
+				"https://coder.test/chats/990e8400-e29b-41d4-a716-446655440000";
+			const body = buildFailureCommentBody(detail, {
+				chatsUrl,
+				chatUrl,
+				chatStatus: "error",
+				marker,
+			});
+			expect(body).toContain("**Coder Agent Chat: failed**");
+			expect(body).toContain("chat ran and ended in an error state");
+			// The polling-network phrasing must not be on the chat-error
+			// path; that phrasing tells the operator to debug connectivity
+			// when the real cause is the agent's runtime failure.
+			expect(body).not.toContain("while polling the chat");
+			expect(body).toContain("last_error");
+			expect(body).toContain(chatUrl);
+			expect(body.endsWith(marker)).toBe(true);
+		},
+	);
+
+	test(
+		"api_error without chatUrl keeps the creation-phase heading and " +
+			"body phrasing",
+		() => {
+			const detail: FailureDetail = {
+				kind: "api_error",
+				message: "Coder API error: Bad Gateway",
+			};
+			const body = buildFailureCommentBody(detail, { chatsUrl, marker });
+			expect(body).toContain("**Coder Agent Chat: failed to start**");
+			expect(body).toContain("while running the action");
+			expect(body).toContain(chatsUrl);
+			expect(body.endsWith(marker)).toBe(true);
+		},
+	);
 });
 
 describe("normalizeBaseUrl", () => {
@@ -400,4 +507,206 @@ describe("findCommentByPredicate", () => {
 
 		expect(found?.id).toBe(2);
 	});
+});
+describe("buildSuccessCommentBody", () => {
+	const marker = "<!-- coder-agent-chat-action:owner/repo#123 -->";
+	const chatUrl =
+		"https://coder.test/chats/990e8400-e29b-41d4-a716-446655440000";
+
+	test(
+		"wait=complete + completed body shows chat URL, status, PR URL, and " +
+			"additions/deletions/changed-files when diff_status is set",
+		() => {
+			const ctx: SuccessCommentContext = {
+				chatUrl,
+				chatStatus: "completed",
+				marker,
+				waitMode: "complete",
+				chatCreated: true,
+				pullRequestUrl: "https://github.com/owner/repo/pull/42",
+				additions: 50,
+				deletions: 10,
+				changedFiles: 3,
+			};
+			const body = buildSuccessCommentBody(ctx);
+			expect(body).toContain(chatUrl);
+			expect(body).toContain("Status: completed");
+			expect(body).toContain("https://github.com/owner/repo/pull/42");
+			// Assert the rendered phrases, not the raw integers; the marker
+			// includes "3" so toContain("3") would pass even when the
+			// changedFiles render path is unreachable.
+			expect(body).toContain("+50 additions");
+			expect(body).toContain("-10 deletions");
+			expect(body).toContain("3 files changed");
+			expect(body.endsWith(marker)).toBe(true);
+		},
+	);
+
+	test(
+		"wait=complete + completed body omits PR URL and additions/deletions " +
+			"when diff_status is null",
+		() => {
+			const ctx: SuccessCommentContext = {
+				chatUrl,
+				chatStatus: "completed",
+				marker,
+				waitMode: "complete",
+				chatCreated: true,
+			};
+			const body = buildSuccessCommentBody(ctx);
+			expect(body).toContain(chatUrl);
+			expect(body).toContain("Status: completed");
+			expect(body).not.toContain("github.com/owner/repo/pull");
+			expect(body.endsWith(marker)).toBe(true);
+		},
+	);
+
+	test(
+		"wait=complete + waiting body uses ambiguous phrasing and does not " +
+			"claim completion",
+		() => {
+			const ctx: SuccessCommentContext = {
+				chatUrl,
+				chatStatus: "waiting",
+				marker,
+				waitMode: "complete",
+				chatCreated: true,
+			};
+			const body = buildSuccessCommentBody(ctx);
+			// `waiting` is ambiguous (agent done vs awaiting input).
+			// The comment must not claim completion.
+			expect(body.toLowerCase()).toContain("awaiting input");
+			expect(body.toLowerCase()).not.toContain("completed");
+			expect(body).toContain(chatUrl);
+			expect(body.endsWith(marker)).toBe(true);
+		},
+	);
+
+	test(
+		"wait=none + chatCreated=true renders the 'created' heading and " +
+			"omits diff fields even when callers supply them",
+		() => {
+			// Supply diff fields and assert they are absent so the test
+			// catches a regression that drops the wait=none gate.
+			const ctx: SuccessCommentContext = {
+				chatUrl,
+				chatStatus: "running",
+				marker,
+				waitMode: "none",
+				chatCreated: true,
+				pullRequestUrl: "https://github.com/owner/repo/pull/42",
+				additions: 50,
+				deletions: 10,
+				changedFiles: 3,
+			};
+			const body = buildSuccessCommentBody(ctx);
+			expect(body).toContain("**Coder Agent Chat: created**");
+			expect(body).toContain(chatUrl);
+			expect(body).toContain("Status: running");
+			// The wait=none gate must drop diff fields even when the
+			// caller passed them.
+			expect(body).not.toContain("pull/42");
+			expect(body).not.toContain("+50 additions");
+			expect(body).not.toContain("-10 deletions");
+			expect(body).not.toContain("3 files changed");
+			expect(body.endsWith(marker)).toBe(true);
+		},
+	);
+
+	test(
+		"wait=none + chatCreated=false renders the 'message sent' heading " +
+			"so the comment does not lie about creation on the existing-chat-id " +
+			"follow-up path",
+		() => {
+			const ctx: SuccessCommentContext = {
+				chatUrl,
+				chatStatus: "running",
+				marker,
+				waitMode: "none",
+				chatCreated: false,
+			};
+			const body = buildSuccessCommentBody(ctx);
+			expect(body).toContain("**Coder Agent Chat: message sent**");
+			expect(body).not.toContain("**Coder Agent Chat: created**");
+			expect(body).toContain(chatUrl);
+			expect(body).toContain("Status: running");
+			expect(body.endsWith(marker)).toBe(true);
+		},
+	);
+
+	test(
+		"omits the Status line when chatStatus is undefined (chat object " +
+			"unavailable) instead of rendering a placeholder",
+		() => {
+			const ctx: SuccessCommentContext = {
+				chatUrl,
+				chatStatus: undefined,
+				marker,
+				waitMode: "none",
+				chatCreated: false,
+			};
+			const body = buildSuccessCommentBody(ctx);
+			expect(body).toContain(chatUrl);
+			expect(body).not.toContain("Status:");
+			expect(body).not.toContain("unknown");
+			expect(body.endsWith(marker)).toBe(true);
+		},
+	);
+
+	test(
+		"wait=complete + chatStatus=undefined renders the safety-net " +
+			"heading and omits the Status line",
+		() => {
+			// The branch is currently unreachable (waitForTerminal always
+			// returns a chat or throws), but the safety-net code emits
+			// `**Coder Agent Chat: complete**` for this case so a future
+			// invariant break does not produce a body with no heading.
+			// Test the safety net so a regression does not silently render
+			// the wrong output.
+			const ctx: SuccessCommentContext = {
+				chatUrl,
+				chatStatus: undefined,
+				marker,
+				waitMode: "complete",
+				chatCreated: true,
+			};
+			const body = buildSuccessCommentBody(ctx);
+			expect(body).toContain("**Coder Agent Chat: complete**");
+			expect(body).not.toContain("Status:");
+			expect(body.endsWith(marker)).toBe(true);
+		},
+	);
+
+	test("the marker uses the configured prefix", () => {
+		const ctx: SuccessCommentContext = {
+			chatUrl,
+			chatStatus: "running",
+			marker: buildCommentMarker("owner/repo#1"),
+			waitMode: "none",
+			chatCreated: true,
+		};
+		const body = buildSuccessCommentBody(ctx);
+		expect(body).toContain("<!-- coder-agent-chat-action:owner/repo#1 -->");
+	});
+
+	test(
+		"per-chat spend is dropped from the body (per-user is misleading at " +
+			"the per-chat granularity)",
+		() => {
+			const ctx: SuccessCommentContext = {
+				chatUrl,
+				chatStatus: "completed",
+				marker,
+				waitMode: "complete",
+				chatCreated: true,
+			};
+			const body = buildSuccessCommentBody(ctx);
+			// The chats API exposes per-user spend only; rendering it as
+			// per-chat would be misleading. Keep the body free of spend
+			// references until a per-chat field exists.
+			expect(body.toLowerCase()).not.toContain("spend");
+			expect(body.toLowerCase()).not.toContain("micros");
+			expect(body).not.toContain("$");
+		},
+	);
 });
