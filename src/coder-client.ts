@@ -68,22 +68,32 @@ export class RealCoderClient implements CoderClient {
 		if (githubUserId === 0) {
 			throw "GitHub user ID cannot be 0";
 		}
-		const endpoint = `/api/v2/users?q=${encodeURIComponent(`github_com_user_id:${githubUserId}`)}`;
+		// coderd's GetUsers SQL hardcodes `users.deleted = false`, so the
+		// response is already filtered server-side. The client-side
+		// `u.deleted !== true` pass below is forward-compatible defense in
+		// depth in case `codersdk.User` later starts serializing `deleted`.
+		const filter = `github_com_user_id:${githubUserId}`;
+		const endpoint = `/api/v2/users?q=${encodeURIComponent(filter)}`;
 		const response = await this.request<unknown[]>(endpoint);
 		const userList = CoderSDKGetUsersResponseSchema.parse(response);
-		if (userList.users.length === 0) {
+		const liveUsers = userList.users.filter((u) => u.deleted !== true);
+		if (liveUsers.length === 0) {
 			throw new CoderAPIError(
 				`No Coder user found with GitHub user ID ${githubUserId}`,
 				404,
+				undefined,
+				"user_not_found",
 			);
 		}
-		if (userList.users.length > 1) {
+		if (liveUsers.length > 1) {
 			throw new CoderAPIError(
 				`Multiple Coder users found with GitHub user ID ${githubUserId}`,
 				409,
+				undefined,
+				"user_ambiguous",
 			);
 		}
-		return CoderSDKUserSchema.parse(userList.users[0]);
+		return CoderSDKUserSchema.parse(liveUsers[0]);
 	}
 
 	async createChat(params: CreateChatRequest): Promise<CoderChat> {
@@ -125,13 +135,16 @@ export class RealCoderClient implements CoderClient {
 export const ChatIdSchema = z.string().uuid().brand("ChatId");
 export type ChatId = z.infer<typeof ChatIdSchema>;
 
-// User schemas (same as create-task-action)
+// `deleted` is parsed leniently: `codersdk.User` does not currently
+// serialize it, but we declare it so the filter in
+// `getCoderUserByGitHubId` keeps working if the API exposes it later.
 export const CoderSDKUserSchema = z.object({
 	id: z.string().uuid(),
 	username: z.string(),
 	email: z.string().email(),
 	organization_ids: z.array(z.string().uuid()),
 	github_com_user_id: z.number().optional(),
+	deleted: z.boolean().optional(),
 });
 export type CoderSDKUser = z.infer<typeof CoderSDKUserSchema>;
 
@@ -230,12 +243,26 @@ export type CreateChatMessageResponse = z.infer<
 	typeof CreateChatMessageResponseSchema
 >;
 
+// Full enum for the `chat-error-kind` action output. This client only
+// raises `user_not_found` and `user_ambiguous`; the rest are populated
+// downstream when API errors are mapped to outputs.
+export const ChatErrorKindSchema = z.enum([
+	"user_not_found",
+	"user_ambiguous",
+	"org_not_found",
+	"spend_exceeded",
+	"api_error",
+	"timeout",
+]);
+export type ChatErrorKind = z.infer<typeof ChatErrorKindSchema>;
+
 // CoderAPIError
 export class CoderAPIError extends Error {
 	constructor(
 		message: string,
 		public readonly statusCode: number,
 		public readonly response?: unknown,
+		public readonly kind?: ChatErrorKind,
 	) {
 		super(message);
 		this.name = "CoderAPIError";

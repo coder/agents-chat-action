@@ -29,7 +29,11 @@ describe("CoderClient", () => {
 				mockUser.github_com_user_id,
 			);
 			expect(mockFetch).toHaveBeenCalledWith(
-				`https://coder.test/api/v2/users?q=github_com_user_id%3A${mockUser.github_com_user_id?.toString()}`,
+				expect.stringMatching(
+					new RegExp(
+						`^https://coder\\.test/api/v2/users\\?q=.*github_com_user_id%3A${mockUser.github_com_user_id}.*$`,
+					),
+				),
 				expect.objectContaining({
 					headers: expect.objectContaining({
 						"Coder-Session-Token": "test-token",
@@ -52,6 +56,88 @@ describe("CoderClient", () => {
 			expect(
 				client.getCoderUserByGitHubId(mockUser.github_com_user_id ?? 0),
 			).rejects.toThrow(CoderAPIError);
+		});
+
+		test("sends only the github_com_user_id filter (no status filter)", async () => {
+			mockFetch.mockResolvedValue(createMockResponse(mockUserList));
+			await client.getCoderUserByGitHubId(mockUser.github_com_user_id ?? 0);
+			const calledUrl = mockFetch.mock.calls[0]?.[0] as string;
+			const rawQuery = decodeURIComponent(calledUrl.split("?q=")[1] ?? "");
+			expect(rawQuery).toContain(
+				`github_com_user_id:${mockUser.github_com_user_id}`,
+			);
+			// `status:` would over-filter dormant and suspended users.
+			expect(rawQuery).not.toContain("status:");
+		});
+
+		test("returns the live user when a soft-deleted user shares the github id", async () => {
+			const liveUser = { ...mockUser };
+			const deletedUser = {
+				...mockUser,
+				id: "770e8400-e29b-41d4-a716-446655440002",
+				username: "olddeleteduser",
+				deleted: true,
+			};
+			mockFetch.mockResolvedValue(
+				createMockResponse({ users: [deletedUser, liveUser] }),
+			);
+			const result = await client.getCoderUserByGitHubId(
+				mockUser.github_com_user_id ?? 0,
+			);
+			expect(result.id).toBe(liveUser.id);
+			expect(result.username).toBe(liveUser.username);
+		});
+
+		test("keeps a user with explicit deleted: false (locks in three-state semantics)", async () => {
+			const liveUser = { ...mockUser, deleted: false };
+			mockFetch.mockResolvedValue(createMockResponse({ users: [liveUser] }));
+			const result = await client.getCoderUserByGitHubId(
+				mockUser.github_com_user_id ?? 0,
+			);
+			expect(result.id).toBe(liveUser.id);
+			expect(result.username).toBe(liveUser.username);
+		});
+
+		test("errors with user_ambiguous kind when two live users share the github id", async () => {
+			mockFetch.mockResolvedValue(createMockResponse(mockUserListDuplicate));
+			let caught: unknown;
+			try {
+				await client.getCoderUserByGitHubId(mockUser.github_com_user_id ?? 0);
+			} catch (err) {
+				caught = err;
+			}
+			expect(caught).toBeInstanceOf(CoderAPIError);
+			expect((caught as CoderAPIError).kind).toBe("user_ambiguous");
+		});
+
+		test("errors with user_not_found kind when all matching users are soft-deleted", async () => {
+			const deletedUser = {
+				...mockUser,
+				id: "770e8400-e29b-41d4-a716-446655440003",
+				username: "olddeleteduser",
+				deleted: true,
+			};
+			mockFetch.mockResolvedValue(createMockResponse({ users: [deletedUser] }));
+			let caught: unknown;
+			try {
+				await client.getCoderUserByGitHubId(mockUser.github_com_user_id ?? 0);
+			} catch (err) {
+				caught = err;
+			}
+			expect(caught).toBeInstanceOf(CoderAPIError);
+			expect((caught as CoderAPIError).kind).toBe("user_not_found");
+		});
+
+		test("errors with user_not_found kind when the response is empty", async () => {
+			mockFetch.mockResolvedValue(createMockResponse(mockUserListEmpty));
+			let caught: unknown;
+			try {
+				await client.getCoderUserByGitHubId(mockUser.github_com_user_id ?? 0);
+			} catch (err) {
+				caught = err;
+			}
+			expect(caught).toBeInstanceOf(CoderAPIError);
+			expect((caught as CoderAPIError).kind).toBe("user_not_found");
 		});
 
 		test("throws on 401 unauthorized", async () => {
