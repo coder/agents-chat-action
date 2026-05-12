@@ -26956,9 +26956,9 @@ class CoderAPIError extends Error {
 
 // src/sanitize-label-key.ts
 var RESERVED_LABEL_KEYS = new Set([
-  "coder-agent-chat-action",
+  "coder-agents-chat-action",
   "gh-target",
-  "coder-agent-chat-action-user"
+  "coder-agents-chat-action-user"
 ]);
 function sanitizeLabelKey(input) {
   const lowered = input.toLowerCase();
@@ -26971,7 +26971,7 @@ function sanitizeLabelKey(input) {
 // src/comment.ts
 var core = __toESM(require_core(), 1);
 var GITHUB_URL_REGEX = /([^/]+)\/([^/]+)\/(?:issues|pull)\/(\d+)\/?(?:[?#].*)?$/;
-var COMMENT_MARKER_PREFIX = "<!-- coder-agent-chat-action:";
+var COMMENT_MARKER_PREFIX = "<!-- coder-agents-chat-action:";
 var COMMENT_MARKER_SUFFIX = " -->";
 function buildCommentMarker(key) {
   return `${COMMENT_MARKER_PREFIX}${key}${COMMENT_MARKER_SUFFIX}`;
@@ -27072,7 +27072,7 @@ function formatMicrosAsDollars(micros) {
 }
 function buildFailureCommentBody(detail, ctx) {
   const runPhase = isRunPhaseFailure(detail.kind, ctx);
-  const heading = runPhase ? "**Coder Agent Chat: failed**" : "**Coder Agent Chat: failed to start**";
+  const heading = runPhase ? "**Coder Agents Chat: failed**" : "**Coder Agents Chat: failed to start**";
   const lines = [heading, ""];
   const linkLine = ctx.chatUrl ? `View the chat in the Coder deployment: ${ctx.chatUrl}` : `View chats in the Coder deployment: ${ctx.chatsUrl}`;
   switch (detail.kind) {
@@ -27133,15 +27133,15 @@ function apiErrorPhrase(runPhase, ctx) {
 function buildSuccessCommentBody(ctx) {
   const lines = [];
   if (ctx.waitMode === "complete" && ctx.chatStatus === "waiting") {
-    lines.push("**Coder Agent Chat: agent finished or is awaiting input**");
+    lines.push("**Coder Agents Chat: agent finished or is awaiting input**");
   } else if (ctx.waitMode === "complete" && ctx.chatStatus !== undefined) {
-    lines.push(`**Coder Agent Chat: ${ctx.chatStatus}**`);
+    lines.push(`**Coder Agents Chat: ${ctx.chatStatus}**`);
   } else if (ctx.waitMode === "complete") {
-    lines.push("**Coder Agent Chat: complete**");
+    lines.push("**Coder Agents Chat: complete**");
   } else if (ctx.chatCreated) {
-    lines.push("**Coder Agent Chat: created**");
+    lines.push("**Coder Agents Chat: created**");
   } else {
-    lines.push("**Coder Agent Chat: message sent**");
+    lines.push("**Coder Agents Chat: message sent**");
   }
   lines.push("", `Chat: ${ctx.chatUrl}`);
   if (ctx.chatStatus !== undefined) {
@@ -27692,7 +27692,7 @@ class CoderAgentChatAction {
         return this.buildOutputs(coderUsername, refreshed, false);
       }
     }
-    core2.info("Creating new agent chat...");
+    core2.info("Creating new agents chat...");
     const organizationID = await this.resolveOrganizationID(coderUsername, resolvedUser);
     const req = {
       organization_id: organizationID,
@@ -27704,7 +27704,7 @@ class CoderAgentChatAction {
       req.labels = this.buildIdempotencyLabels(sanitizedKey, ghTarget, resolvedUser.id);
     }
     const createdChat = await this.coder.createChat(req);
-    core2.info(`Agent chat created successfully (id: ${createdChat.id}, status: ${createdChat.status})`);
+    core2.info(`Agents chat created successfully (id: ${createdChat.id}, status: ${createdChat.status})`);
     const chatUrl = this.generateChatUrl(createdChat.id);
     core2.info(`Chat URL: ${chatUrl}`);
     let finalChat = createdChat;
@@ -27735,7 +27735,7 @@ class CoderAgentChatAction {
   async findIdempotentMatch(sanitizedKey, ghTarget, coderUserId) {
     const keyLabel = `${sanitizedKey}:true`;
     const targetLabel = `gh-target:${ghTarget}`;
-    const userLabel = `coder-agent-chat-action-user:${coderUserId}`;
+    const userLabel = `coder-agents-chat-action-user:${coderUserId}`;
     let chats;
     try {
       chats = await this.coder.listChats({
@@ -27768,9 +27768,9 @@ class CoderAgentChatAction {
       throw new Error(`idempotency-key sanitizes to a reserved chat-label key ("${sanitizedKey}"). ` + `Reserved keys: ${[...RESERVED_LABEL_KEYS].join(", ")}. ` + "Choose a different idempotency-key value.");
     }
     const labels = {
-      "coder-agent-chat-action": "true",
+      "coder-agents-chat-action": "true",
       "gh-target": ghTarget,
-      "coder-agent-chat-action-user": coderUserId
+      "coder-agents-chat-action-user": coderUserId
     };
     labels[sanitizedKey] = "true";
     return labels;

@@ -32,9 +32,9 @@ describe("sanitizeLabelKey", () => {
 describe("RESERVED_LABEL_KEYS", () => {
 	test("includes the per-user scope key that prevents cross-user hijack", () => {
 		// Without this entry, a sanitized idempotency-key value of
-		// "coder-agent-chat-action-user" would silently overwrite the
+		// "coder-agents-chat-action-user" would silently overwrite the
 		// per-user label and let any user impersonate any other on the
 		// same target.
-		expect(RESERVED_LABEL_KEYS.has("coder-agent-chat-action-user")).toBe(true);
+		expect(RESERVED_LABEL_KEYS.has("coder-agents-chat-action-user")).toBe(true);
 	});
 });

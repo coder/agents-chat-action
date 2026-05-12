@@ -266,15 +266,15 @@ describe("CoderAgentChatAction", () => {
 			expect(call.owner).toBe("owner");
 			expect(call.repo).toBe("repo");
 			expect(call.issue_number).toBe(123);
-			expect(call.body).toContain("**Coder Agent Chat: created**");
+			expect(call.body).toContain("**Coder Agents Chat: created**");
 			expect(call.body).toContain("Chat: chat-url");
 			expect(call.body).toContain(
-				"<!-- coder-agent-chat-action:test-org/test-repo#123 -->",
+				"<!-- coder-agents-chat-action:test-org/test-repo#123 -->",
 			);
 		});
 
 		test("updates the existing marker comment in place", async () => {
-			const marker = "<!-- coder-agent-chat-action:test-org/test-repo#123 -->";
+			const marker = "<!-- coder-agents-chat-action:test-org/test-repo#123 -->";
 			octokit.rest.issues.listComments.mockResolvedValue({
 				data: [
 					{ id: 1, body: `prior\n\n${marker}` },
@@ -1806,7 +1806,7 @@ describe("CoderAgentChatAction", () => {
 
 		test("wait=complete + commentOnIssue posts the comment after the chat reaches terminal", async () => {
 			// Polling must complete before the comment goes out, otherwise a
-			// failure mid-poll would leave a stale "Agent chat:" comment on
+			// failure mid-poll would leave a stale "Agents Chat:" comment on
 			// the issue while the workflow step itself fails.
 			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
 			coderClient.mockCreateChat.mockResolvedValue({
@@ -2605,7 +2605,7 @@ describe("CoderAgentChatAction", () => {
 				expect(call?.body).toContain("$10.00");
 				expect(call?.body).toContain("https://coder.test/chats");
 				expect(call?.body).toContain(
-					"<!-- coder-agent-chat-action:test-org/test-repo#123 -->",
+					"<!-- coder-agents-chat-action:test-org/test-repo#123 -->",
 				);
 			},
 		);
@@ -2647,7 +2647,7 @@ describe("CoderAgentChatAction", () => {
 				expect(call?.body).toContain("github-user-id");
 				expect(call?.body).toContain("coder-username");
 				expect(call?.body).toContain(
-					"<!-- coder-agent-chat-action:test-org/test-repo#123 -->",
+					"<!-- coder-agents-chat-action:test-org/test-repo#123 -->",
 				);
 			},
 		);
@@ -2688,7 +2688,7 @@ describe("CoderAgentChatAction", () => {
 				expect(call?.body).toContain("chat-error-kind=user_ambiguous");
 				expect(call?.body).toContain("coder-username");
 				expect(call?.body).toContain(
-					"<!-- coder-agent-chat-action:test-org/test-repo#123 -->",
+					"<!-- coder-agents-chat-action:test-org/test-repo#123 -->",
 				);
 			},
 		);
@@ -2721,7 +2721,7 @@ describe("CoderAgentChatAction", () => {
 				| undefined;
 			expect(call?.body).toContain("chat-error-kind=api_error");
 			expect(call?.body).toContain(
-				"<!-- coder-agent-chat-action:test-org/test-repo#123 -->",
+				"<!-- coder-agents-chat-action:test-org/test-repo#123 -->",
 			);
 		});
 
@@ -2758,7 +2758,7 @@ describe("CoderAgentChatAction", () => {
 					new CoderAPIError("Coder API error: Bad Request", 400, ""),
 				);
 				const marker =
-					"<!-- coder-agent-chat-action:test-org/test-repo#123 -->";
+					"<!-- coder-agents-chat-action:test-org/test-repo#123 -->";
 				octokit.rest.issues.listComments.mockResolvedValue({
 					data: [
 						{ id: 1, body: "Some unrelated comment" },
@@ -2823,7 +2823,7 @@ describe("CoderAgentChatAction", () => {
 						| { body: string }
 						| undefined;
 					expect(call?.body).toContain(
-						"<!-- coder-agent-chat-action:test-org/test-repo#123:doc-check -->",
+						"<!-- coder-agents-chat-action:test-org/test-repo#123:doc-check -->",
 					);
 				} finally {
 					delete process.env.GITHUB_WORKFLOW;
@@ -2865,7 +2865,7 @@ describe("CoderAgentChatAction", () => {
 					| undefined;
 				expect(call?.issue_number).toBe(77);
 				expect(call?.body).toContain(
-					"<!-- coder-agent-chat-action:test-org/test-repo#77 -->",
+					"<!-- coder-agents-chat-action:test-org/test-repo#77 -->",
 				);
 			},
 		);
@@ -3415,16 +3415,18 @@ describe("CoderAgentChatAction", () => {
 					| { labels?: Record<string, string> }
 					| undefined;
 				expect(req?.labels).toBeDefined();
-				expect(req?.labels?.["coder-agent-chat-action"]).toBe("true");
+				expect(req?.labels?.["coder-agents-chat-action"]).toBe("true");
 				expect(req?.labels?.["gh-target"]).toBe("test-org/test-repo#123");
-				expect(req?.labels?.["coder-agent-chat-action-user"]).toBe(mockUser.id);
+				expect(req?.labels?.["coder-agents-chat-action-user"]).toBe(
+					mockUser.id,
+				);
 				// The fourth key is the sanitized idempotency-key: exactly one
 				// extra key, allowed by the platform's regex, mapped to "true".
 				const sanitizedKeys = Object.keys(req?.labels ?? {}).filter(
 					(k) =>
-						k !== "coder-agent-chat-action" &&
+						k !== "coder-agents-chat-action" &&
 						k !== "gh-target" &&
-						k !== "coder-agent-chat-action-user",
+						k !== "coder-agents-chat-action-user",
 				);
 				expect(sanitizedKeys).toHaveLength(1);
 				const sanitizedKey = sanitizedKeys[0];
@@ -3458,7 +3460,7 @@ describe("CoderAgentChatAction", () => {
 			expect(arg?.label).toEqual([
 				"my-key:true",
 				"gh-target:test-org/test-repo#123",
-				`coder-agent-chat-action-user:${mockUser.id}`,
+				`coder-agents-chat-action-user:${mockUser.id}`,
 			]);
 			expect(arg?.archived).toBe(false);
 		});
@@ -3508,7 +3510,7 @@ describe("CoderAgentChatAction", () => {
 				const commentCall = octokit.rest.issues.createComment.mock
 					.calls[0]?.[0] as { body: string } | undefined;
 				expect(commentCall?.body).toMatch(
-					/^\*\*Coder Agent Chat: message sent\*\*/,
+					/^\*\*Coder Agents Chat: message sent\*\*/,
 				);
 			},
 		);
@@ -3647,9 +3649,9 @@ describe("CoderAgentChatAction", () => {
 				| { labels?: Record<string, string> }
 				| undefined;
 			expect(createReq?.labels).toEqual({
-				"coder-agent-chat-action": "true",
+				"coder-agents-chat-action": "true",
 				"gh-target": "test-org/test-repo#123",
-				"coder-agent-chat-action-user": mockUser.id,
+				"coder-agents-chat-action-user": mockUser.id,
 				"my-key": "true",
 			});
 		});
@@ -3790,10 +3792,10 @@ describe("CoderAgentChatAction", () => {
 					| { label?: string[] }
 					| undefined;
 				expect(arg?.label).toContain(
-					`coder-agent-chat-action-user:${userB.id}`,
+					`coder-agents-chat-action-user:${userB.id}`,
 				);
 				expect(arg?.label).not.toContain(
-					`coder-agent-chat-action-user:${mockUser.id}`,
+					`coder-agents-chat-action-user:${mockUser.id}`,
 				);
 
 				// Creation went through and stamped User B's UUID into the
@@ -3803,7 +3805,7 @@ describe("CoderAgentChatAction", () => {
 				const createReq = coderClient.mockCreateChat.mock.calls[0]?.[0] as
 					| { labels?: Record<string, string> }
 					| undefined;
-				expect(createReq?.labels?.["coder-agent-chat-action-user"]).toBe(
+				expect(createReq?.labels?.["coder-agents-chat-action-user"]).toBe(
 					userB.id,
 				);
 			},
@@ -3845,14 +3847,14 @@ describe("CoderAgentChatAction", () => {
 					| { label?: string[] }
 					| undefined;
 				expect(arg?.label).toContain(
-					`coder-agent-chat-action-user:${mockUser.id}`,
+					`coder-agents-chat-action-user:${mockUser.id}`,
 				);
 
 				expect(coderClient.mockCreateChat).toHaveBeenCalledTimes(1);
 				const createReq = coderClient.mockCreateChat.mock.calls[0]?.[0] as
 					| { labels?: Record<string, string> }
 					| undefined;
-				expect(createReq?.labels?.["coder-agent-chat-action-user"]).toBe(
+				expect(createReq?.labels?.["coder-agents-chat-action-user"]).toBe(
 					mockUser.id,
 				);
 			},

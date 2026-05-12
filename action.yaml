@@ -1,14 +1,14 @@
-name: "Coder Create Agent Chat"
-description: "Create a Coder Agent Chat for a GitHub user, with support for issue commenting"
+name: "Coder Agents Chat"
+description: "Run Coder agents from any GitHub workflow. Triage issues, review PRs, or follow up on an existing chat."
 author: "Coder Technologies Inc. <https://coder.com>"
 
 branding:
-  icon: message-circle
-  color: purple
+  icon: play
+  color: gray-dark
 
 inputs:
   chat-prompt:
-    description: "Prompt to send to the agent chat. Templated by the workflow before being passed in."
+    description: "Prompt to send to the agents chat. Templated by the workflow before being passed in."
     required: true
 
   coder-token:

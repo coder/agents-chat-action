@@ -623,7 +623,7 @@ export class CoderAgentChatAction {
 		if (this.inputs.coderUsername) {
 			core.info(`Using provided Coder username: ${this.inputs.coderUsername}`);
 			// Fetch the full user so `user.id` is available downstream for
-			// the `coder-agent-chat-action-user` per-user idempotency scope
+			// the `coder-agents-chat-action-user` per-user idempotency scope
 			// (S7).
 			let coderUser: CoderSDKUser;
 			try {
@@ -1024,7 +1024,7 @@ export class CoderAgentChatAction {
 		// existing non-archived chat scoped to this `gh-target` and the
 		// resolved Coder user, and reuse it before creating a duplicate.
 		// The lookup ANDs the sanitized key with `gh-target` and
-		// `coder-agent-chat-action-user` so a shared `idempotency-key`
+		// `coder-agents-chat-action-user` so a shared `idempotency-key`
 		// across targets or users does not cross-contaminate.
 		const sanitizedKey = this.inputs.idempotencyKey
 			? sanitizeLabelKey(this.inputs.idempotencyKey)
@@ -1089,7 +1089,7 @@ export class CoderAgentChatAction {
 		// existing-chat path inherits the chat's org via `createChatMessage`,
 		// and resolving eagerly would fire an extra API call and a spurious
 		// `org_not_found` failure for users with no org memberships.
-		core.info("Creating new agent chat...");
+		core.info("Creating new agents chat...");
 		const organizationID = await this.resolveOrganizationID(
 			coderUsername,
 			resolvedUser,
@@ -1110,7 +1110,7 @@ export class CoderAgentChatAction {
 
 		const createdChat = await this.coder.createChat(req);
 		core.info(
-			`Agent chat created successfully (id: ${createdChat.id}, status: ${createdChat.status})`,
+			`Agents chat created successfully (id: ${createdChat.id}, status: ${createdChat.status})`,
 		);
 
 		const chatUrl = this.generateChatUrl(createdChat.id);
@@ -1161,7 +1161,7 @@ export class CoderAgentChatAction {
 	): Promise<CoderChat | undefined> {
 		const keyLabel = `${sanitizedKey}:true`;
 		const targetLabel = `gh-target:${ghTarget}`;
-		const userLabel = `coder-agent-chat-action-user:${coderUserId}`;
+		const userLabel = `coder-agents-chat-action-user:${coderUserId}`;
 		let chats: CoderChat[];
 		try {
 			chats = await this.coder.listChats({
@@ -1218,9 +1218,9 @@ export class CoderAgentChatAction {
 			);
 		}
 		const labels: Record<string, string> = {
-			"coder-agent-chat-action": "true",
+			"coder-agents-chat-action": "true",
 			"gh-target": ghTarget,
-			"coder-agent-chat-action-user": coderUserId,
+			"coder-agents-chat-action-user": coderUserId,
 		};
 		labels[sanitizedKey] = "true";
 		return labels;

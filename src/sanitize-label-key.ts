@@ -4,9 +4,9 @@
  * user input cannot overwrite an action-owned label.
  */
 export const RESERVED_LABEL_KEYS: ReadonlySet<string> = new Set([
-	"coder-agent-chat-action",
+	"coder-agents-chat-action",
 	"gh-target",
-	"coder-agent-chat-action-user",
+	"coder-agents-chat-action-user",
 ]);
 
 /**
