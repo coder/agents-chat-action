@@ -8,7 +8,11 @@ import {
 } from "./action";
 import type { Octokit } from "./action";
 import { CoderAPIError } from "./coder-client";
-import { ChatIdSchema, type CoderSDKUser } from "./coder-client";
+import {
+	ChatIdSchema,
+	type CoderChat,
+	type CoderSDKUser,
+} from "./coder-client";
 import { ActionOutputsSchema } from "./schemas";
 import {
 	MockCoderClient,
@@ -1763,9 +1767,10 @@ describe("CoderAgentChatAction", () => {
 			await action.run();
 
 			// Assert both observable effects of skipping the loop: no
-			// getChat and no clock sleep.
+			// getChat and no clock sleep. listChats fires once (the chat
+			// reuse lookup) and is not the polling shape.
 			expect(coderClient.mockGetChat).not.toHaveBeenCalled();
-			expect(coderClient.mockListChats).not.toHaveBeenCalled();
+			expect(coderClient.mockListChats).toHaveBeenCalledTimes(1);
 			expect(clock.sleeps).toEqual([]);
 		});
 
@@ -1797,10 +1802,11 @@ describe("CoderAgentChatAction", () => {
 
 			await action.run();
 
-			// 3 polls + 2 sleeps mirrors doc-check.yaml's cadence.
-			// listChats is the wrong API shape; assert it is never used.
+			// 3 polls + 2 sleeps mirrors doc-check.yaml's cadence. The
+			// single listChats call is the reuse lookup, not the polling
+			// shape.
 			expect(coderClient.mockGetChat).toHaveBeenCalledTimes(3);
-			expect(coderClient.mockListChats).not.toHaveBeenCalled();
+			expect(coderClient.mockListChats).toHaveBeenCalledTimes(1);
 			expect(clock.sleeps).toEqual([POLL_INTERVAL_MS, POLL_INTERVAL_MS]);
 		});
 
@@ -3360,14 +3366,238 @@ describe("CoderAgentChatAction", () => {
 		});
 	});
 
-	describe("Idempotency by label", () => {
-		test("unset: action creates a new chat without listChats and without labels", async () => {
+	describe("Chat reuse", () => {
+		test("default: listChats is called with the gh-target and per-user scope before creating", async () => {
+			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
+			coderClient.mockListChats.mockResolvedValue([]);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+
+			const inputs = createMockInputs({ githubUserID: 12345 });
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				createMockContext(),
+			);
+
+			await action.run();
+
+			expect(coderClient.mockListChats).toHaveBeenCalledTimes(1);
+			const arg = coderClient.mockListChats.mock.calls[0]?.[0] as
+				| { label?: string[]; archived?: boolean }
+				| undefined;
+			expect(arg?.label).toEqual([
+				"gh-target:test-org/test-repo#123",
+				`coder-agents-chat-action-user:${mockUser.id}`,
+			]);
+			expect(arg?.archived).toBe(false);
+			expect(coderClient.mockCreateChat).toHaveBeenCalledTimes(1);
+		});
+
+		test("default: GITHUB_WORKFLOW is included in the lookup and on the created chat", async () => {
+			process.env.GITHUB_WORKFLOW = "doc-check";
+			try {
+				coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
+				coderClient.mockListChats.mockResolvedValue([]);
+				coderClient.mockCreateChat.mockResolvedValue(mockChat);
+
+				const inputs = createMockInputs({ githubUserID: 12345 });
+				const action = new CoderAgentChatAction(
+					coderClient,
+					octokit as unknown as Octokit,
+					inputs,
+					createMockContext(),
+				);
+
+				await action.run();
+
+				const listArg = coderClient.mockListChats.mock.calls[0]?.[0] as
+					| { label?: string[] }
+					| undefined;
+				expect(listArg?.label).toContain(
+					"coder-agents-chat-action-workflow:doc-check",
+				);
+				const createReq = coderClient.mockCreateChat.mock.calls[0]?.[0] as
+					| { labels?: Record<string, string> }
+					| undefined;
+				expect(createReq?.labels?.["coder-agents-chat-action-workflow"]).toBe(
+					"doc-check",
+				);
+			} finally {
+				delete process.env.GITHUB_WORKFLOW;
+			}
+		});
+
+		test("default: writes the three core labels on the new chat", async () => {
+			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
+			coderClient.mockListChats.mockResolvedValue([]);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+
+			const inputs = createMockInputs({ githubUserID: 12345 });
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				createMockContext(),
+			);
+
+			await action.run();
+
+			const req = coderClient.mockCreateChat.mock.calls[0]?.[0] as
+				| { labels?: Record<string, string> }
+				| undefined;
+			expect(req?.labels?.["coder-agents-chat-action"]).toBe("true");
+			expect(req?.labels?.["gh-target"]).toBe("test-org/test-repo#123");
+			expect(req?.labels?.["coder-agents-chat-action-user"]).toBe(mockUser.id);
+			// Workflow env unset; no workflow label and no sharding key.
+			expect(Object.keys(req?.labels ?? {}).sort()).toEqual([
+				"coder-agents-chat-action",
+				"coder-agents-chat-action-user",
+				"gh-target",
+			]);
+		});
+
+		test("default + match: sends a follow-up via createChatMessage and does not create", async () => {
+			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
+			coderClient.mockListChats.mockResolvedValue([
+				{ ...mockChat, archived: false },
+			]);
+			coderClient.mockCreateChatMessage.mockResolvedValue(
+				mockChatMessageResponse,
+			);
+			coderClient.mockGetChat.mockResolvedValue(mockChat);
+
+			const inputs = createMockInputs({ githubUserID: 12345 });
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				createMockContext(),
+			);
+
+			const outputs = await action.run();
+
+			expect(coderClient.mockCreateChatMessage).toHaveBeenCalledTimes(1);
+			expect(coderClient.mockCreateChat).not.toHaveBeenCalled();
+			expect(outputs.chatCreated).toBe(false);
+		});
+
+		test("default + getChat refresh fails: returns the pre-message snapshot instead of failing", async () => {
+			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
+			coderClient.mockListChats.mockResolvedValue([
+				{ ...mockChat, archived: false },
+			]);
+			coderClient.mockCreateChatMessage.mockResolvedValue(
+				mockChatMessageResponse,
+			);
+			coderClient.mockGetChat.mockRejectedValue(new Error("network"));
+
+			const inputs = createMockInputs({ githubUserID: 12345 });
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				createMockContext(),
+			);
+
+			const outputs = await action.run();
+
+			expect(outputs.chatId).toBe(mockChat.id);
+			expect(outputs.chatCreated).toBe(false);
+		});
+
+		test("default + multiple non-archived matches: picks the most recent by updated_at and warns", async () => {
+			const older: CoderChat = {
+				...mockChat,
+				id: ChatIdSchema.parse("00000000-0000-0000-0000-000000000001"),
+				updated_at: "2026-01-01T00:00:00.000000Z",
+				archived: false,
+			};
+			const newer: CoderChat = {
+				...mockChat,
+				id: ChatIdSchema.parse("00000000-0000-0000-0000-000000000002"),
+				updated_at: "2026-02-01T00:00:00.000000Z",
+				archived: false,
+			};
+			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
+			coderClient.mockListChats.mockResolvedValue([older, newer]);
+			coderClient.mockCreateChatMessage.mockResolvedValue(
+				mockChatMessageResponse,
+			);
+			coderClient.mockGetChat.mockResolvedValue(newer);
+			const warnSpy = spyOn(core, "warning");
+
+			const inputs = createMockInputs({ githubUserID: 12345 });
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				createMockContext(),
+			);
+
+			await action.run();
+
+			expect(coderClient.mockCreateChatMessage).toHaveBeenCalledWith(
+				newer.id,
+				expect.anything(),
+			);
+			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(older.id));
+			warnSpy.mockRestore();
+		});
+
+		test("default + only archived match: creates a new chat (does not unarchive)", async () => {
+			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
+			coderClient.mockListChats.mockResolvedValue([
+				{ ...mockChat, archived: true },
+			]);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+
+			const inputs = createMockInputs({ githubUserID: 12345 });
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				createMockContext(),
+			);
+
+			await action.run();
+
+			expect(coderClient.mockCreateChat).toHaveBeenCalledTimes(1);
+			expect(coderClient.mockCreateChatMessage).not.toHaveBeenCalled();
+		});
+
+		test("existing-chat-id wins: lookup is skipped", async () => {
+			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
+			coderClient.mockCreateChatMessage.mockResolvedValue(
+				mockChatMessageResponse,
+			);
+			coderClient.mockGetChat.mockResolvedValue(mockChat);
+
+			const inputs = createMockInputs({
+				githubUserID: 12345,
+				existingChatId: mockChat.id,
+			});
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				createMockContext(),
+			);
+
+			await action.run();
+
+			expect(coderClient.mockListChats).not.toHaveBeenCalled();
+			expect(coderClient.mockCreateChatMessage).toHaveBeenCalledTimes(1);
+			expect(coderClient.mockCreateChat).not.toHaveBeenCalled();
+		});
+
+		test("force-new-chat: skips lookup and creates a new chat", async () => {
 			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
 			coderClient.mockCreateChat.mockResolvedValue(mockChat);
 
 			const inputs = createMockInputs({
 				githubUserID: 12345,
-				idempotencyKey: undefined,
+				forceNewChat: true,
 			});
 			const action = new CoderAgentChatAction(
 				coderClient,
@@ -3380,24 +3610,108 @@ describe("CoderAgentChatAction", () => {
 
 			expect(coderClient.mockListChats).not.toHaveBeenCalled();
 			expect(coderClient.mockCreateChat).toHaveBeenCalledTimes(1);
-			const req = coderClient.mockCreateChat.mock.calls[0]?.[0] as
-				| { labels?: Record<string, string> }
-				| undefined;
-			expect(req?.labels).toBeUndefined();
-			expect(coderClient.mockCreateChatMessage).not.toHaveBeenCalled();
 		});
 
-		test(
-			"set, no match: creates with the three labels and uses the " +
-				"sanitized key value",
-			async () => {
+		test("listChats throws: error propagates with operation context", async () => {
+			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
+			coderClient.mockListChats.mockRejectedValue(new Error("boom"));
+
+			const inputs = createMockInputs({ githubUserID: 12345 });
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				createMockContext(),
+			);
+
+			await expect(action.run()).rejects.toThrow(
+				/Failed to look up chats by reuse labels/,
+			);
+		});
+
+		test("distinct users on the same target each get their own chat (no cross-user hijack)", async () => {
+			// User B's lookup must carry their own user label so the chats API
+			// cannot AND-match a chat created with mockUser.id, and the new
+			// chat must be stamped with User B's UUID.
+			const userB: CoderSDKUser = {
+				...mockUser,
+				id: "770e8400-e29b-41d4-a716-446655440777",
+				username: "userB",
+			};
+			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(userB);
+			coderClient.mockListChats.mockResolvedValue([]);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+
+			const inputs = createMockInputs({ githubUserID: 67890 });
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				createMockContext(),
+			);
+
+			await action.run();
+
+			const listArg = coderClient.mockListChats.mock.calls[0]?.[0] as
+				| { label?: string[] }
+				| undefined;
+			expect(listArg?.label).toContain(
+				`coder-agents-chat-action-user:${userB.id}`,
+			);
+			expect(listArg?.label).not.toContain(
+				`coder-agents-chat-action-user:${mockUser.id}`,
+			);
+			const createReq = coderClient.mockCreateChat.mock.calls[0]?.[0] as
+				| { labels?: Record<string, string> }
+				| undefined;
+			expect(createReq?.labels?.["coder-agents-chat-action-user"]).toBe(
+				userB.id,
+			);
+		});
+
+		test("coder-username path: per-user scope is applied via getCoderUserByUsername", async () => {
+			coderClient.mockGetCoderUserByUsername.mockResolvedValue(mockUser);
+			coderClient.mockListChats.mockResolvedValue([]);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+
+			const inputs = createMockInputs({
+				githubUserID: undefined,
+				coderUsername: mockUser.username,
+			});
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				createMockContext(),
+			);
+
+			await action.run();
+
+			expect(coderClient.mockGetCoderUserByUsername).toHaveBeenCalledWith(
+				mockUser.username,
+			);
+			const listArg = coderClient.mockListChats.mock.calls[0]?.[0] as
+				| { label?: string[] }
+				| undefined;
+			expect(listArg?.label).toContain(
+				`coder-agents-chat-action-user:${mockUser.id}`,
+			);
+			const createReq = coderClient.mockCreateChat.mock.calls[0]?.[0] as
+				| { labels?: Record<string, string> }
+				| undefined;
+			expect(createReq?.labels?.["coder-agents-chat-action-user"]).toBe(
+				mockUser.id,
+			);
+		});
+
+		describe("idempotency-key sharding", () => {
+			test("adds the sanitized key to lookup and to the new chat's labels", async () => {
 				coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
 				coderClient.mockListChats.mockResolvedValue([]);
 				coderClient.mockCreateChat.mockResolvedValue(mockChat);
 
 				const inputs = createMockInputs({
 					githubUserID: 12345,
-					githubURL: "https://github.com/test-org/test-repo/issues/123",
 					idempotencyKey: "My Custom Key!",
 				});
 				const action = new CoderAgentChatAction(
@@ -3409,331 +3723,30 @@ describe("CoderAgentChatAction", () => {
 
 				await action.run();
 
-				expect(coderClient.mockListChats).toHaveBeenCalledTimes(1);
-				expect(coderClient.mockCreateChat).toHaveBeenCalledTimes(1);
-				const req = coderClient.mockCreateChat.mock.calls[0]?.[0] as
+				const listArg = coderClient.mockListChats.mock.calls[0]?.[0] as
+					| { label?: string[] }
+					| undefined;
+				// The sanitized key is added as a `<key>:true` filter.
+				expect(
+					listArg?.label?.some((l) => /^my-custom-key.*:true$/.test(l)),
+				).toBe(true);
+				const createReq = coderClient.mockCreateChat.mock.calls[0]?.[0] as
 					| { labels?: Record<string, string> }
 					| undefined;
-				expect(req?.labels).toBeDefined();
-				expect(req?.labels?.["coder-agents-chat-action"]).toBe("true");
-				expect(req?.labels?.["gh-target"]).toBe("test-org/test-repo#123");
-				expect(req?.labels?.["coder-agents-chat-action-user"]).toBe(
-					mockUser.id,
-				);
-				// The fourth key is the sanitized idempotency-key: exactly one
-				// extra key, allowed by the platform's regex, mapped to "true".
-				const sanitizedKeys = Object.keys(req?.labels ?? {}).filter(
+				const extraKeys = Object.keys(createReq?.labels ?? {}).filter(
 					(k) =>
 						k !== "coder-agents-chat-action" &&
 						k !== "gh-target" &&
 						k !== "coder-agents-chat-action-user",
 				);
-				expect(sanitizedKeys).toHaveLength(1);
-				const sanitizedKey = sanitizedKeys[0];
-				expect(sanitizedKey).toMatch(/^[a-z0-9][a-z0-9._/-]*$/);
-				expect(req?.labels?.[sanitizedKey]).toBe("true");
-			},
-		);
-
-		test("set, no match: listChats is called with the sanitized label filter", async () => {
-			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
-			coderClient.mockListChats.mockResolvedValue([]);
-			coderClient.mockCreateChat.mockResolvedValue(mockChat);
-
-			const inputs = createMockInputs({
-				githubUserID: 12345,
-				idempotencyKey: "my-key",
+				expect(extraKeys).toHaveLength(1);
+				expect(extraKeys[0]).toMatch(/^my-custom-key/);
+				expect(createReq?.labels?.[extraKeys[0]]).toBe("true");
 			});
-			const action = new CoderAgentChatAction(
-				coderClient,
-				octokit as unknown as Octokit,
-				inputs,
-				createMockContext(),
-			);
 
-			await action.run();
-
-			expect(coderClient.mockListChats).toHaveBeenCalledTimes(1);
-			const arg = coderClient.mockListChats.mock.calls[0]?.[0] as
-				| { label?: string | string[]; archived?: boolean }
-				| undefined;
-			expect(arg?.label).toEqual([
-				"my-key:true",
-				"gh-target:test-org/test-repo#123",
-				`coder-agents-chat-action-user:${mockUser.id}`,
-			]);
-			expect(arg?.archived).toBe(false);
-		});
-
-		test(
-			"set, one non-archived match: sends a follow-up via createChatMessage " +
-				"and does not create a new chat",
-			async () => {
-				coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
-				coderClient.mockListChats.mockResolvedValue([
-					{ ...mockChat, archived: false },
-				]);
-				coderClient.mockCreateChatMessage.mockResolvedValue(
-					mockChatMessageResponse,
-				);
-				coderClient.mockGetChat.mockResolvedValue(mockChat);
-
-				const inputs = createMockInputs({
-					githubUserID: 12345,
-					idempotencyKey: "my-key",
-				});
-				const action = new CoderAgentChatAction(
-					coderClient,
-					octokit as unknown as Octokit,
-					inputs,
-					createMockContext(),
-				);
-
-				const result = await action.run();
-
-				expect(coderClient.mockCreateChat).not.toHaveBeenCalled();
-				expect(coderClient.mockCreateChatMessage).toHaveBeenCalledTimes(1);
-				const [chatId, params] =
-					coderClient.mockCreateChatMessage.mock.calls[0] ?? [];
-				expect(chatId).toBe(mockChat.id);
-				expect(params).toEqual({
-					content: [{ type: "text", text: "Test prompt" }],
-					model_config_id: undefined,
-				});
-
-				const parsedResult = ActionOutputsSchema.parse(result);
-				expect(parsedResult.chatCreated).toBe(false);
-				expect(parsedResult.chatId).toBe(mockChat.id);
-				// Reuse path uses S8's success-comment body shape with the
-				// "message sent" heading (not "created").
-				expect(octokit.rest.issues.createComment).toHaveBeenCalledTimes(1);
-				const commentCall = octokit.rest.issues.createComment.mock
-					.calls[0]?.[0] as { body: string } | undefined;
-				expect(commentCall?.body).toMatch(
-					/^\*\*Coder Agents Chat: message sent\*\*/,
-				);
-			},
-		);
-
-		test(
-			"set, single match, getChat refresh fails: action resolves with " +
-				"pre-message snapshot rather than failing",
-			async () => {
-				// Outputs degrade to the pre-message chat when the refresh
-				// throws; the message itself already succeeded.
-				const stale = {
-					...mockChat,
-					archived: false,
-					status: "waiting" as const,
-				};
-				coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
-				coderClient.mockListChats.mockResolvedValue([stale]);
-				coderClient.mockCreateChatMessage.mockResolvedValue(
-					mockChatMessageResponse,
-				);
-				coderClient.mockGetChat.mockRejectedValue(
-					new Error("transient API error"),
-				);
-
-				const inputs = createMockInputs({
-					githubUserID: 12345,
-					idempotencyKey: "my-key",
-				});
-				const action = new CoderAgentChatAction(
-					coderClient,
-					octokit as unknown as Octokit,
-					inputs,
-					createMockContext(),
-				);
-
-				const result = await action.run();
-
-				const parsedResult = ActionOutputsSchema.parse(result);
-				expect(parsedResult.chatCreated).toBe(false);
-				expect(parsedResult.chatId).toBe(stale.id);
-				expect(parsedResult.chatStatus).toBe("waiting");
-				expect(coderClient.mockGetChat).toHaveBeenCalledWith(stale.id);
-			},
-		);
-
-		test(
-			"set, multiple non-archived matches: picks the most recent by " +
-				"updated_at and warns in the workflow log",
-			async () => {
-				const older = {
-					...mockChat,
-					id: ChatIdSchema.parse("aa0e8400-e29b-41d4-a716-446655440111"),
-					archived: false,
-					updated_at: "2026-04-01T00:00:00Z",
-				};
-				const newer = {
-					...mockChat,
-					id: ChatIdSchema.parse("bb0e8400-e29b-41d4-a716-446655440222"),
-					archived: false,
-					updated_at: "2026-04-29T00:00:00Z",
-				};
-				coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
-				// Non-sorted order: proves the action sorts itself.
-				coderClient.mockListChats.mockResolvedValue([older, newer]);
-				coderClient.mockCreateChatMessage.mockResolvedValue(
-					mockChatMessageResponse,
-				);
-				// Keep the warning count at one (the multi-match warning).
-				coderClient.mockGetChat.mockResolvedValue(newer);
-
-				const warnSpy = spyOn(core, "warning").mockImplementation(() => {});
-
-				const inputs = createMockInputs({
-					githubUserID: 12345,
-					idempotencyKey: "my-key",
-					// Avoid the unwired-input warning for `coder-organization`.
-					coderOrganization: undefined,
-				});
-				const action = new CoderAgentChatAction(
-					coderClient,
-					octokit as unknown as Octokit,
-					inputs,
-					createMockContext(),
-				);
-
-				try {
-					await action.run();
-
-					expect(coderClient.mockCreateChat).not.toHaveBeenCalled();
-					expect(coderClient.mockCreateChatMessage).toHaveBeenCalledTimes(1);
-					const [chatId] =
-						coderClient.mockCreateChatMessage.mock.calls[0] ?? [];
-					expect(chatId).toBe(newer.id);
-
-					expect(warnSpy).toHaveBeenCalledTimes(1);
-					const warnArg = warnSpy.mock.calls[0]?.[0];
-					expect(String(warnArg)).toContain("my-key");
-					expect(String(warnArg)).toContain(newer.id);
-					// The reused chat is not listed as ignored.
-					const msg = String(warnArg);
-					const ignoringClause = msg.slice(msg.indexOf("and ignoring:"));
-					expect(ignoringClause).not.toContain(newer.id);
-					expect(ignoringClause).toContain(older.id);
-				} finally {
-					warnSpy.mockRestore();
-				}
-			},
-		);
-
-		test("set, only match is archived: creates a new chat (does not unarchive)", async () => {
-			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
-			coderClient.mockListChats.mockResolvedValue([
-				{ ...mockChat, archived: true },
-			]);
-			coderClient.mockCreateChat.mockResolvedValue(mockChat);
-
-			const inputs = createMockInputs({
-				githubUserID: 12345,
-				idempotencyKey: "my-key",
-			});
-			const action = new CoderAgentChatAction(
-				coderClient,
-				octokit as unknown as Octokit,
-				inputs,
-				createMockContext(),
-			);
-
-			await action.run();
-
-			// Pin that the lookup ran; otherwise the archived filter is
-			// not what made creation proceed.
-			expect(coderClient.mockListChats).toHaveBeenCalledTimes(1);
-			expect(coderClient.mockCreateChatMessage).not.toHaveBeenCalled();
-			expect(coderClient.mockCreateChat).toHaveBeenCalledTimes(1);
-			const createReq = coderClient.mockCreateChat.mock.calls[0]?.[0] as
-				| { labels?: Record<string, string> }
-				| undefined;
-			expect(createReq?.labels).toEqual({
-				"coder-agents-chat-action": "true",
-				"gh-target": "test-org/test-repo#123",
-				"coder-agents-chat-action-user": mockUser.id,
-				"my-key": "true",
-			});
-		});
-
-		test(
-			"set, existing-chat-id provided: skips listChats lookup and uses " +
-				"the existing-chat-id (existing-chat-id wins)",
-			async () => {
-				coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
-				coderClient.mockCreateChatMessage.mockResolvedValue(
-					mockChatMessageResponse,
-				);
-				coderClient.mockGetChat.mockResolvedValue(mockChat);
-
-				const existingChatId = "990e8400-e29b-41d4-a716-446655440000";
-				const inputs = createMockInputs({
-					githubUserID: 12345,
-					existingChatId,
-					idempotencyKey: "my-key",
-				});
-				const action = new CoderAgentChatAction(
-					coderClient,
-					octokit as unknown as Octokit,
-					inputs,
-					createMockContext(),
-				);
-
-				const result = await action.run();
-
-				expect(coderClient.mockListChats).not.toHaveBeenCalled();
-				expect(coderClient.mockCreateChat).not.toHaveBeenCalled();
-				expect(coderClient.mockCreateChatMessage).toHaveBeenCalledWith(
-					existingChatId,
-					expect.objectContaining({
-						content: [{ type: "text", text: "Test prompt" }],
-					}),
-				);
-				const parsedResult = ActionOutputsSchema.parse(result);
-				expect(parsedResult.chatCreated).toBe(false);
-				expect(parsedResult.chatId).toBe(mockChat.id);
-				expect(parsedResult.chatStatus).toBe(mockChat.status);
-				expect(parsedResult.chatTitle).toBe(mockChat.title);
-			},
-		);
-
-		test(
-			"set, listChats throws: error propagates with operation context " +
-				"(no silent fall-through to creation)",
-			async () => {
-				// A failed lookup must propagate (no silent fall-through to
-				// duplicate creation) and the message must name what failed.
-				coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
-				coderClient.mockListChats.mockRejectedValue(
-					new CoderAPIError("Coder API error: Bad Request", 400, ""),
-				);
-
-				const inputs = createMockInputs({
-					githubUserID: 12345,
-					idempotencyKey: "my-key",
-				});
-				const action = new CoderAgentChatAction(
-					coderClient,
-					octokit as unknown as Octokit,
-					inputs,
-					createMockContext(),
-				);
-
-				await expect(action.run()).rejects.toThrow(
-					/Failed to look up chats by idempotency labels/,
-				);
-				expect(coderClient.mockCreateChat).not.toHaveBeenCalled();
-				expect(coderClient.mockCreateChatMessage).not.toHaveBeenCalled();
-			},
-		);
-
-		test(
-			"set to a value that sanitizes to a reserved label key: " +
-				"action fails fast with a clear error and does not call the API",
-			async () => {
-				// `idempotency-key: "gh-target"` would silently overwrite
-				// the reserved label. The check is hoisted before
-				// findIdempotentMatch, so listChats never runs.
+			test("sharding key that sanitizes to a reserved label key is rejected fast", async () => {
+				// `idempotency-key: "gh-target"` would silently overwrite an
+				// action-owned scope label. Reject before any API call.
 				coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
 
 				const inputs = createMockInputs({
@@ -3747,117 +3760,10 @@ describe("CoderAgentChatAction", () => {
 					createMockContext(),
 				);
 
-				await expect(action.run()).rejects.toThrow(/reserved/i);
+				await expect(action.run()).rejects.toThrow(/reserved chat-label key/);
 				expect(coderClient.mockListChats).not.toHaveBeenCalled();
 				expect(coderClient.mockCreateChat).not.toHaveBeenCalled();
-				expect(coderClient.mockCreateChatMessage).not.toHaveBeenCalled();
-			},
-		);
-
-		test(
-			"set, distinct Coder users sharing the same idempotency-key on the " +
-				"same gh-target each get their own chat (no cross-user hijack)",
-			async () => {
-				// User A's chat lookup matches their own chat; User B with a
-				// different resolved user ID, the same key, and the same target
-				// must not find User A's chat. We pin this by asserting the
-				// lookup carries the per-user label so the API cannot AND-match
-				// a chat created with the other user's UUID.
-				const userB: CoderSDKUser = {
-					...mockUser,
-					id: "770e8400-e29b-41d4-a716-446655440777",
-					username: "userB",
-				};
-				coderClient.mockGetCoderUserByGithubID.mockResolvedValue(userB);
-				coderClient.mockListChats.mockResolvedValue([]);
-				coderClient.mockCreateChat.mockResolvedValue(mockChat);
-
-				const inputs = createMockInputs({
-					githubUserID: 67890,
-					idempotencyKey: "shared-key",
-				});
-				const action = new CoderAgentChatAction(
-					coderClient,
-					octokit as unknown as Octokit,
-					inputs,
-					createMockContext(),
-				);
-
-				await action.run();
-
-				// The lookup must include the per-user scope so the chats API
-				// cannot match a chat created with mockUser.id.
-				expect(coderClient.mockListChats).toHaveBeenCalledTimes(1);
-				const arg = coderClient.mockListChats.mock.calls[0]?.[0] as
-					| { label?: string[] }
-					| undefined;
-				expect(arg?.label).toContain(
-					`coder-agents-chat-action-user:${userB.id}`,
-				);
-				expect(arg?.label).not.toContain(
-					`coder-agents-chat-action-user:${mockUser.id}`,
-				);
-
-				// Creation went through and stamped User B's UUID into the
-				// chat's per-user label so a later lookup by User B finds it
-				// and a later lookup by User A does not.
-				expect(coderClient.mockCreateChat).toHaveBeenCalledTimes(1);
-				const createReq = coderClient.mockCreateChat.mock.calls[0]?.[0] as
-					| { labels?: Record<string, string> }
-					| undefined;
-				expect(createReq?.labels?.["coder-agents-chat-action-user"]).toBe(
-					userB.id,
-				);
-			},
-		);
-
-		test(
-			"set, coder-username resolution path: the same per-user scope is " +
-				"applied as the github-user-id path",
-			async () => {
-				// All other idempotency tests resolve the user via
-				// `getCoderUserByGithubID`. Without this test, dropping the
-				// `getCoderUserByUsername` call (leaving `coderUserId`
-				// uninitialized) would still pass the rest of the suite.
-				coderClient.mockGetCoderUserByUsername.mockResolvedValue(mockUser);
-				coderClient.mockListChats.mockResolvedValue([]);
-				coderClient.mockCreateChat.mockResolvedValue(mockChat);
-
-				const inputs = createMockInputs({
-					githubUserID: undefined,
-					coderUsername: mockUser.username,
-					idempotencyKey: "my-key",
-				});
-				const action = new CoderAgentChatAction(
-					coderClient,
-					octokit as unknown as Octokit,
-					inputs,
-					createMockContext(),
-				);
-
-				await action.run();
-
-				expect(coderClient.mockGetCoderUserByUsername).toHaveBeenCalledWith(
-					mockUser.username,
-				);
-				expect(coderClient.mockGetCoderUserByGithubID).not.toHaveBeenCalled();
-
-				expect(coderClient.mockListChats).toHaveBeenCalledTimes(1);
-				const arg = coderClient.mockListChats.mock.calls[0]?.[0] as
-					| { label?: string[] }
-					| undefined;
-				expect(arg?.label).toContain(
-					`coder-agents-chat-action-user:${mockUser.id}`,
-				);
-
-				expect(coderClient.mockCreateChat).toHaveBeenCalledTimes(1);
-				const createReq = coderClient.mockCreateChat.mock.calls[0]?.[0] as
-					| { labels?: Record<string, string> }
-					| undefined;
-				expect(createReq?.labels?.["coder-agents-chat-action-user"]).toBe(
-					mockUser.id,
-				);
-			},
-		);
+			});
+		});
 	});
 });

@@ -7,6 +7,7 @@ export const RESERVED_LABEL_KEYS: ReadonlySet<string> = new Set([
 	"coder-agents-chat-action",
 	"gh-target",
 	"coder-agents-chat-action-user",
+	"coder-agents-chat-action-workflow",
 ]);
 
 /**

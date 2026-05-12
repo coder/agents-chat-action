@@ -1020,12 +1020,13 @@ export class CoderAgentChatAction {
 			};
 		}
 
-		// Idempotency by label: if `idempotency-key` is set, look up an
-		// existing non-archived chat scoped to this `gh-target` and the
-		// resolved Coder user, and reuse it before creating a duplicate.
-		// The lookup ANDs the sanitized key with `gh-target` and
-		// `coder-agents-chat-action-user` so a shared `idempotency-key`
-		// across targets or users does not cross-contaminate.
+		// Chat reuse: the action reuses the most recent non-archived chat
+		// scoped to this `gh-target`, the resolved Coder user, and the
+		// workflow name (when `GITHUB_WORKFLOW` is set), so re-runs and
+		// follow-up triggers converge on one chat per target/user/workflow.
+		// `force-new-chat` skips the lookup; `idempotency-key` shards
+		// further so two workflow runs with the same scope can maintain
+		// distinct chats.
 		const sanitizedKey = this.inputs.idempotencyKey
 			? sanitizeLabelKey(this.inputs.idempotencyKey)
 			: undefined;
@@ -1037,15 +1038,17 @@ export class CoderAgentChatAction {
 			);
 		}
 		const ghTarget = `${githubOrg}/${githubRepo}#${githubIssueNumber}`;
+		const workflow = process.env.GITHUB_WORKFLOW || undefined;
 
-		if (sanitizedKey) {
-			const follow = await this.findIdempotentMatch(
-				sanitizedKey,
+		if (!this.inputs.forceNewChat) {
+			const follow = await this.findReuseMatch(
 				ghTarget,
 				resolvedUser.id,
+				workflow,
+				sanitizedKey,
 			);
 			if (follow) {
-				core.info(`Reusing existing chat by idempotency label: ${follow.id}`);
+				core.info(`Reusing existing chat: ${follow.id}`);
 				await this.coder.createChatMessage(follow.id, {
 					content: [{ type: "text", text: this.inputs.chatPrompt }],
 					model_config_id: this.inputs.modelConfigId,
@@ -1099,14 +1102,13 @@ export class CoderAgentChatAction {
 			content: [{ type: "text", text: this.inputs.chatPrompt }],
 			workspace_id: this.inputs.workspaceId,
 			model_config_id: this.inputs.modelConfigId,
-		};
-		if (sanitizedKey) {
-			req.labels = this.buildIdempotencyLabels(
-				sanitizedKey,
+			labels: this.buildChatLabels(
 				ghTarget,
 				resolvedUser.id,
-			);
-		}
+				workflow,
+				sanitizedKey,
+			),
+		};
 
 		const createdChat = await this.coder.createChat(req);
 		core.info(
@@ -1151,27 +1153,36 @@ export class CoderAgentChatAction {
 	}
 
 	/**
-	 * Most-recent non-archived match for this key+target+user, or undefined.
-	 * Warns on multiple matches (concurrent triggers can race).
+	 * Most-recent non-archived chat matching the reuse scope, or undefined.
+	 * Scope: gh-target + coder-user; workflow when GITHUB_WORKFLOW is set;
+	 * sanitized idempotency-key when set. Warns on multiple matches.
 	 */
-	private async findIdempotentMatch(
-		sanitizedKey: string,
+	private async findReuseMatch(
 		ghTarget: string,
 		coderUserId: string,
+		workflow: string | undefined,
+		sanitizedKey: string | undefined,
 	): Promise<CoderChat | undefined> {
-		const keyLabel = `${sanitizedKey}:true`;
-		const targetLabel = `gh-target:${ghTarget}`;
-		const userLabel = `coder-agents-chat-action-user:${coderUserId}`;
+		const labels: string[] = [
+			`gh-target:${ghTarget}`,
+			`coder-agents-chat-action-user:${coderUserId}`,
+		];
+		if (workflow) {
+			labels.push(`coder-agents-chat-action-workflow:${workflow}`);
+		}
+		if (sanitizedKey) {
+			labels.push(`${sanitizedKey}:true`);
+		}
 		let chats: CoderChat[];
 		try {
 			chats = await this.coder.listChats({
-				label: [keyLabel, targetLabel, userLabel],
+				label: labels,
 				archived: false,
 			});
 		} catch (err) {
 			const inner = err instanceof Error ? err.message : String(err);
 			throw new Error(
-				`Failed to look up chats by idempotency labels [${keyLabel}, ${targetLabel}, ${userLabel}]: ${inner}`,
+				`Failed to look up chats by reuse labels [${labels.join(", ")}]: ${inner}`,
 				{ cause: err },
 			);
 		}
@@ -1194,7 +1205,7 @@ export class CoderAgentChatAction {
 				.map((c) => c.id)
 				.join(", ");
 			core.warning(
-				`Multiple non-archived chats matched idempotency-key=${this.inputs.idempotencyKey} for ${ghTarget}. ` +
+				`Multiple non-archived chats matched reuse scope for ${ghTarget}. ` +
 					`Reusing the most recent (${live[0].id}) and ignoring: ${ignored}. ` +
 					"Concurrent triggers can race; subsequent runs converge on the " +
 					"most recent match.",
@@ -1203,14 +1214,20 @@ export class CoderAgentChatAction {
 		return live[0];
 	}
 
-	private buildIdempotencyLabels(
-		sanitizedKey: string,
+	/**
+	 * Labels written on chat creation. Three are always written; the
+	 * workflow label is added when GITHUB_WORKFLOW is set; the sanitized
+	 * idempotency-key is added when set.
+	 */
+	private buildChatLabels(
 		ghTarget: string,
 		coderUserId: string,
+		workflow: string | undefined,
+		sanitizedKey: string | undefined,
 	): Record<string, string> {
 		// Defense in depth: `runInner` rejects collisions before any API
 		// call; this guards direct callers.
-		if (RESERVED_LABEL_KEYS.has(sanitizedKey)) {
+		if (sanitizedKey && RESERVED_LABEL_KEYS.has(sanitizedKey)) {
 			throw new Error(
 				`idempotency-key sanitizes to a reserved chat-label key ("${sanitizedKey}"). ` +
 					`Reserved keys: ${[...RESERVED_LABEL_KEYS].join(", ")}. ` +
@@ -1222,7 +1239,12 @@ export class CoderAgentChatAction {
 			"gh-target": ghTarget,
 			"coder-agents-chat-action-user": coderUserId,
 		};
-		labels[sanitizedKey] = "true";
+		if (workflow) {
+			labels["coder-agents-chat-action-workflow"] = workflow;
+		}
+		if (sanitizedKey) {
+			labels[sanitizedKey] = "true";
+		}
 		return labels;
 	}
 }
