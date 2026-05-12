@@ -191,6 +191,26 @@ describe("ActionInputsSchema", () => {
 			expect(() => ActionInputsSchema.parse(input)).toThrow();
 		});
 
+		// The schema's `.int().positive()` already rejected NaN before
+		// this PR. We pin it here so the schema cannot silently relax
+		// to admit `NaN`, which is what the parser produces for any
+		// non-decimal input (see src/index.test.ts).
+		test("rejects NaN githubUserID", () => {
+			const input = {
+				...actionInputValid,
+				githubUserID: Number.NaN,
+			};
+			expect(() => ActionInputsSchema.parse(input)).toThrow();
+		});
+
+		test("rejects non-integer githubUserID", () => {
+			const input = {
+				...actionInputValid,
+				githubUserID: 12.5,
+			};
+			expect(() => ActionInputsSchema.parse(input)).toThrow();
+		});
+
 		test("rejects empty coderUsername", () => {
 			const { githubUserID: _, ...withoutGithubUserID } = actionInputValid;
 			const input = { ...withoutGithubUserID, coderUsername: "" };
