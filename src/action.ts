@@ -623,8 +623,7 @@ export class CoderAgentChatAction {
 		if (this.inputs.coderUsername) {
 			core.info(`Using provided Coder username: ${this.inputs.coderUsername}`);
 			// Fetch the full user so `user.id` is available downstream for
-			// the `coder-agents-chat-action-user` per-user idempotency scope
-			// (S7).
+			// the `coder-agents-chat-action-user` per-user reuse scope.
 			let coderUser: CoderSDKUser;
 			try {
 				coderUser = await this.coder.getCoderUserByUsername(
@@ -1170,6 +1169,7 @@ export class CoderAgentChatAction {
 		sanitizedKey: string | undefined,
 	): Promise<CoderChat | undefined> {
 		const labels: string[] = [
+			`coder-agents-chat-action:true`,
 			`gh-target:${ghTarget}`,
 			`coder-agents-chat-action-user:${coderUserId}`,
 		];

@@ -27616,45 +27616,14 @@ class CoderAgentChatAction {
     if (this.inputs.existingChatId) {
       core2.info(`Sending message to existing chat: ${this.inputs.existingChatId}`);
       const chatId = ChatIdSchema.parse(this.inputs.existingChatId);
-      await this.coder.createChatMessage(chatId, {
-        content: [{ type: "text", text: this.inputs.chatPrompt }],
-        model_config_id: this.inputs.modelConfigId
-      });
-      core2.info("Message sent successfully");
-      const chatUrl2 = this.generateChatUrl(chatId);
-      let chat;
-      if (this.inputs.wait === "complete") {
-        core2.info(`Waiting for chat to reach terminal status (timeout: ${this.inputs.waitTimeoutSeconds}s)...`);
-        chat = await this.pollWithContext(chatId, { coderUsername, chatUrl: chatUrl2 }, { requireNonTerminalFirst: true });
-        core2.info(`Chat reached terminal status: ${chat.status}`);
-      } else {
-        try {
-          chat = await this.coder.getChat(chatId);
-          core2.info(`Chat status: ${chat.status}, title: ${chat.title}`);
-        } catch (error3) {
-          core2.warning(`Failed to fetch chat after sending message; outputs will be minimal: ${error3}`);
-        }
-      }
-      if (this.inputs.commentOnIssue) {
-        core2.info(`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`);
-        await this.commentOnIssue({
-          chatUrl: chatUrl2,
-          owner: githubOrg,
-          repo: githubRepo,
-          issueNumber: githubIssueNumber,
-          chatCreated: false,
-          chat
-        });
-      }
-      if (chat) {
-        return this.buildOutputs(coderUsername, chat, false);
-      }
-      return {
+      return this.runFollowUp({
         coderUsername,
         chatId,
-        chatUrl: chatUrl2,
-        chatCreated: false
-      };
+        preMessageChat: undefined,
+        githubOrg,
+        githubRepo,
+        githubIssueNumber
+      });
     }
     const sanitizedKey = this.inputs.idempotencyKey ? sanitizeLabelKey(this.inputs.idempotencyKey) : undefined;
     if (sanitizedKey && RESERVED_LABEL_KEYS.has(sanitizedKey)) {
@@ -27666,32 +27635,14 @@ class CoderAgentChatAction {
       const follow = await this.findReuseMatch(ghTarget, resolvedUser.id, workflow, sanitizedKey);
       if (follow) {
         core2.info(`Reusing existing chat: ${follow.id}`);
-        await this.coder.createChatMessage(follow.id, {
-          content: [{ type: "text", text: this.inputs.chatPrompt }],
-          model_config_id: this.inputs.modelConfigId
+        return this.runFollowUp({
+          coderUsername,
+          chatId: follow.id,
+          preMessageChat: follow,
+          githubOrg,
+          githubRepo,
+          githubIssueNumber
         });
-        core2.info("Message sent successfully");
-        const chatUrl2 = this.generateChatUrl(follow.id);
-        let refreshed = follow;
-        try {
-          const fetched = await this.coder.getChat(follow.id);
-          core2.info(`Chat status: ${fetched.status}, title: ${fetched.title}`);
-          refreshed = fetched;
-        } catch (error3) {
-          core2.warning(`Failed to fetch chat after sending message; outputs reflect pre-message state: ${error3}`);
-        }
-        if (this.inputs.commentOnIssue) {
-          core2.info(`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`);
-          await this.commentOnIssue({
-            chatUrl: chatUrl2,
-            owner: githubOrg,
-            repo: githubRepo,
-            issueNumber: githubIssueNumber,
-            chatCreated: false,
-            chat: refreshed
-          });
-        }
-        return this.buildOutputs(coderUsername, refreshed, false);
       }
     }
     core2.info("Creating new agents chat...");
@@ -27732,8 +27683,59 @@ class CoderAgentChatAction {
     }
     return this.buildOutputs(coderUsername, finalChat, true);
   }
+  async runFollowUp(args) {
+    const {
+      coderUsername,
+      chatId,
+      preMessageChat,
+      githubOrg,
+      githubRepo,
+      githubIssueNumber
+    } = args;
+    await this.coder.createChatMessage(chatId, {
+      content: [{ type: "text", text: this.inputs.chatPrompt }],
+      model_config_id: this.inputs.modelConfigId
+    });
+    core2.info("Message sent successfully");
+    const chatUrl = this.generateChatUrl(chatId);
+    let chat = preMessageChat;
+    if (this.inputs.wait === "complete") {
+      core2.info(`Waiting for chat to reach terminal status (timeout: ${this.inputs.waitTimeoutSeconds}s)...`);
+      chat = await this.pollWithContext(chatId, { coderUsername, chatUrl }, { requireNonTerminalFirst: true });
+      core2.info(`Chat reached terminal status: ${chat.status}`);
+    } else {
+      try {
+        const fetched = await this.coder.getChat(chatId);
+        core2.info(`Chat status: ${fetched.status}, title: ${fetched.title}`);
+        chat = fetched;
+      } catch (error3) {
+        core2.warning(preMessageChat ? `Failed to fetch chat after sending message; outputs reflect pre-message state: ${error3}` : `Failed to fetch chat after sending message; outputs will be minimal: ${error3}`);
+      }
+    }
+    if (this.inputs.commentOnIssue) {
+      core2.info(`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`);
+      await this.commentOnIssue({
+        chatUrl,
+        owner: githubOrg,
+        repo: githubRepo,
+        issueNumber: githubIssueNumber,
+        chatCreated: false,
+        chat
+      });
+    }
+    if (chat) {
+      return this.buildOutputs(coderUsername, chat, false);
+    }
+    return {
+      coderUsername,
+      chatId,
+      chatUrl,
+      chatCreated: false
+    };
+  }
   async findReuseMatch(ghTarget, coderUserId, workflow, sanitizedKey) {
     const labels = [
+      `coder-agents-chat-action:true`,
       `gh-target:${ghTarget}`,
       `coder-agents-chat-action-user:${coderUserId}`
     ];

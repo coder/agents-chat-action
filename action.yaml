@@ -67,7 +67,7 @@ inputs:
     default: "600"
 
   idempotency-key:
-    description: "Optional sharding key to override the default per-workflow scope. By default the action reuses the most recent non-archived chat scoped to `gh-target`, the resolved Coder user, and the workflow name. Set this to maintain multiple parallel chats on the same target/user/workflow (for example, one per matrix dimension)."
+    description: "Optional sharding key to narrow the default per-workflow scope. By default the action reuses the most recent non-archived chat scoped to `gh-target`, the resolved Coder user, and the workflow name. Set this to maintain multiple parallel chats on the same target/user/workflow (for example, one per matrix dimension)."
     required: false
 
   force-new-chat:

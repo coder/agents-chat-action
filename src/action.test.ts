@@ -3387,6 +3387,7 @@ describe("CoderAgentChatAction", () => {
 				| { label?: string[]; archived?: boolean }
 				| undefined;
 			expect(arg?.label).toEqual([
+				"coder-agents-chat-action:true",
 				"gh-target:test-org/test-repo#123",
 				`coder-agents-chat-action-user:${mockUser.id}`,
 			]);

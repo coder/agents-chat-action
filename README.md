@@ -2,6 +2,12 @@
 
 GitHub Action that starts a [Coder Agents](https://coder.com/docs/ai-coder/agents) chat against a GitHub issue or pull request, optionally waits for it to finish, and posts the result as a comment. Re-running the workflow on the same target continues the existing chat instead of duplicating.
 
+## Requirements
+
+- Coder deployment with Agents enabled (experimental).
+- Coder session token with permission to read users in the target organization and to create chats.
+- For GitHub-id identity resolution: deployment configured with [GitHub OAuth](https://coder.com/docs/admin/external-auth#configure-a-github-oauth-app) and the Coder user has linked their GitHub account.
+
 ## Quickstart
 
 Triage every issue labeled `coder`:
@@ -155,6 +161,7 @@ jobs:
         with:
           coder-url: ${{ secrets.CODER_URL }}
           coder-token: ${{ secrets.CODER_TOKEN }}
+          coder-organization: ${{ secrets.CODER_ORG }}  # required if the bot belongs to more than one org
           coder-username: doc-check-bot
           chat-prompt: |
             Use the doc-check skill to review PR
@@ -189,6 +196,27 @@ Default chat reuse finds the most recent matching chat and sends the follow-up. 
     force-new-chat: true
 ```
 
+### Gate downstream steps on whether the agent opened a PR
+
+The agent decides whether to fix the issue (opens a PR) or leave a comment. After `wait: complete` returns, `pull-request-url` is set when the chat tracked a PR; downstream steps branch on it.
+
+```yaml
+- id: chat
+  uses: coder/agents-chat-action@v0
+  with:
+    coder-url: ${{ secrets.CODER_URL }}
+    coder-token: ${{ secrets.CODER_TOKEN }}
+    chat-prompt: "Fix the bug described in this issue."
+    github-url: ${{ github.event.issue.html_url }}
+    github-token: ${{ github.token }}
+    wait: complete
+
+- if: steps.chat.outputs.pull-request-url != ''
+  run: gh pr edit ${{ steps.chat.outputs.pull-request-url }} --add-label ai-generated
+  env:
+    GH_TOKEN: ${{ github.token }}
+```
+
 ## Troubleshooting
 
 The action sets `chat-error-kind` and `chat-error-message` on failure, posts a comment when `comment-on-issue` is `true`, and exits non-zero.
@@ -198,8 +226,8 @@ The action sets `chat-error-kind` and `chat-error-message` on failure, posts a c
 | `spend_exceeded`  | Chat spend limit reached. Spent and limit are in the comment. | Wait for reset or raise the deployment's per-user limit. |
 | `user_not_found`  | No Coder user matched the GitHub identity. | Pass `coder-username`, or have the user link their GitHub account in Coder. |
 | `user_ambiguous`  | Multiple live Coder users share the GitHub id. | Set `coder-username` to disambiguate. |
-| `org_not_found`   | Org missing or the user has no memberships. | Fix or set `coder-organization`. |
-| `api_error`       | Any other Coder API error. Message in the comment. | Common causes: bad token, bad `workspace-id`, deployment unreachable. |
+| `org_not_found`   | Org missing or the user has no memberships. The comment names which. | Fix or set `coder-organization`. |
+| `api_error`       | Any other Coder API error. The comment includes the underlying message; wrapped errors carry the original `CoderAPIError` via `Error.cause` and the workflow log renders the full cause chain. | Common causes: bad token, bad `workspace-id`, deployment unreachable. |
 | `timeout`         | `wait: complete` didn't reach terminal in time. | Raise `wait-timeout-seconds`, or split the work. |
 
 Branch on the kind without parsing the message:
@@ -227,12 +255,6 @@ Independent of the gate: fork PRs that need secrets must run under `pull_request
 - `waiting` is ambiguous (agent finished vs. agent waiting for input). The action treats it as terminal under `wait: complete`.
 - Parallel triggers race on chat reuse: two simultaneous runs can both miss the lookup and both create. The action picks the most recent on the next run and warns.
 - Per-chat spend is not surfaced; the API exposes per-user spend only, which is misleading at chat granularity.
-
-## Requirements
-
-- Coder deployment with Agents enabled (experimental).
-- Coder session token with permission to read users in the target organization and to create chats.
-- For GitHub-id identity resolution: deployment configured with [GitHub OAuth](https://coder.com/docs/admin/external-auth#configure-a-github-oauth-app) and the Coder user has linked their GitHub account.
 
 ## Versioning
 

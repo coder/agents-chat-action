@@ -2,7 +2,7 @@
 
 ## Repository Overview
 
-**Purpose**: GitHub Action that creates and manages Coder Agents Chats for GitHub users with automated issue commenting support.
+**Purpose**: GitHub Action that creates and manages Coder Agents chats for GitHub users with automated issue commenting support.
 
 **Key Difference from create-task-action**: This action targets the Coder Agents Chat API (`/api/experimental/chats`) instead of the Tasks API. Agents purposefully does NOT expose template selection — it either auto-provisions a workspace or uses an existing one.
 
