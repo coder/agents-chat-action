@@ -60,7 +60,7 @@ export function buildCommentMarker(key: string): string {
 }
 
 // Derive the marker key. Same value is used by the failure-comment helper
-// and (when wired) by idempotency lookup so they agree per target.
+// and by the success-comment helper so they agree per target.
 //
 // Without a workflow suffix, two workflows targeting the same issue/PR
 // would collide on the same key and overwrite each other's comment.

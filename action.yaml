@@ -48,7 +48,7 @@ inputs:
     required: false
 
   existing-chat-id:
-    description: "Existing chat ID to send a follow-up message to instead of creating a new chat."
+    description: "Existing chat ID to send a follow-up message to instead of creating a new chat. Mutually exclusive with force-new-chat."
     required: false
 
   comment-on-issue:

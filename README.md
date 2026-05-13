@@ -54,7 +54,7 @@ The chat runs under the Coder user linked to the GitHub user who applied the lab
 | `coder-organization`   | no       |         | Coder organization name. Recommended for multi-org users. |
 | `workspace-id`         | no       |         | Pin the chat to an existing workspace. |
 | `model-config-id`      | no       |         | Model configuration to use. |
-| `existing-chat-id`     | no       |         | Send a follow-up to a known chat. Skips chat-reuse lookup. |
+| `existing-chat-id`     | no       |         | Send a follow-up to a known chat. Skips chat-reuse lookup. Mutually exclusive with `force-new-chat`. |
 | `comment-on-issue`     | no       | `true`  | Post the result on `github-url`. |
 | `wait`                 | no       | `none`  | `complete` polls every 5s until terminal status or `wait-timeout-seconds`. |
 | `wait-timeout-seconds` | no       | `600`   | Max wait when `wait: complete`. |

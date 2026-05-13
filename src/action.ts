@@ -9,7 +9,11 @@ import type {
 	CoderSDKUser,
 	CreateChatRequest,
 } from "./coder-client";
-import { RESERVED_LABEL_KEYS, sanitizeLabelKey } from "./sanitize-label-key";
+import {
+	ACTION_LABEL_KEYS,
+	RESERVED_LABEL_KEYS,
+	sanitizeLabelKey,
+} from "./sanitize-label-key";
 import {
 	buildCommentMarker,
 	buildDeploymentChatsUrl,
@@ -985,7 +989,9 @@ export class CoderAgentChatAction {
 		const ghTarget = `${githubOrg}/${githubRepo}#${githubIssueNumber}`;
 		const workflow = process.env.GITHUB_WORKFLOW || undefined;
 
-		if (!this.inputs.forceNewChat) {
+		if (this.inputs.forceNewChat) {
+			core.info("force-new-chat=true: skipping chat-reuse lookup");
+		} else {
 			const follow = await this.findReuseMatch(
 				ghTarget,
 				resolvedUser.id,
@@ -1157,10 +1163,16 @@ export class CoderAgentChatAction {
 			chatCreated: false,
 		};
 	}
+
 	/**
 	 * Most-recent non-archived chat matching the reuse scope, or undefined.
 	 * Scope: gh-target + coder-user; workflow when GITHUB_WORKFLOW is set;
 	 * sanitized idempotency-key when set. Warns on multiple matches.
+	 *
+	 * The label set must stay in sync with `buildChatLabels`: a key the
+	 * lookup queries but the create branch doesn't write (or vice versa)
+	 * breaks reuse silently. `ACTION_LABEL_KEYS` is the shared source of
+	 * truth.
 	 */
 	private async findReuseMatch(
 		ghTarget: string,
@@ -1169,12 +1181,12 @@ export class CoderAgentChatAction {
 		sanitizedKey: string | undefined,
 	): Promise<CoderChat | undefined> {
 		const labels: string[] = [
-			`coder-agents-chat-action:true`,
-			`gh-target:${ghTarget}`,
-			`coder-agents-chat-action-user:${coderUserId}`,
+			`${ACTION_LABEL_KEYS.marker}:true`,
+			`${ACTION_LABEL_KEYS.target}:${ghTarget}`,
+			`${ACTION_LABEL_KEYS.user}:${coderUserId}`,
 		];
 		if (workflow) {
-			labels.push(`coder-agents-chat-action-workflow:${workflow}`);
+			labels.push(`${ACTION_LABEL_KEYS.workflow}:${workflow}`);
 		}
 		if (sanitizedKey) {
 			labels.push(`${sanitizedKey}:true`);
@@ -1224,6 +1236,11 @@ export class CoderAgentChatAction {
 	 * Labels written on chat creation. Three are always written; the
 	 * workflow label is added when GITHUB_WORKFLOW is set; the sanitized
 	 * idempotency-key is added when set.
+	 *
+	 * The label set must stay in sync with `findReuseMatch`: a key the
+	 * create branch writes but the lookup doesn't query (or vice versa)
+	 * breaks reuse silently. `ACTION_LABEL_KEYS` is the shared source of
+	 * truth.
 	 */
 	private buildChatLabels(
 		ghTarget: string,
@@ -1241,12 +1258,12 @@ export class CoderAgentChatAction {
 			);
 		}
 		const labels: Record<string, string> = {
-			"coder-agents-chat-action": "true",
-			"gh-target": ghTarget,
-			"coder-agents-chat-action-user": coderUserId,
+			[ACTION_LABEL_KEYS.marker]: "true",
+			[ACTION_LABEL_KEYS.target]: ghTarget,
+			[ACTION_LABEL_KEYS.user]: coderUserId,
 		};
 		if (workflow) {
-			labels["coder-agents-chat-action-workflow"] = workflow;
+			labels[ACTION_LABEL_KEYS.workflow] = workflow;
 		}
 		if (sanitizedKey) {
 			labels[sanitizedKey] = "true";

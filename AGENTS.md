@@ -35,7 +35,9 @@ CoderAgentChatAction.run() (action.ts)
 ├─ Parse GitHub issue URL
 ├─ Check if existing-chat-id provided
 │  ├─ YES: Send message to existing chat
-│  └─ NO: Create new chat (Agents auto-provisions workspace)
+│  └─ NO: Look up existing chat by reuse labels (unless force-new-chat)
+│         ├─ Match: Send message to reused chat
+│         └─ No match: Create new chat (Agents auto-provisions workspace)
 └─ Comment on GitHub issue with chat URL
 ```
 

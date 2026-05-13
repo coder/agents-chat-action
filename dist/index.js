@@ -26955,12 +26955,13 @@ class CoderAPIError extends Error {
 }
 
 // src/sanitize-label-key.ts
-var RESERVED_LABEL_KEYS = new Set([
-  "coder-agents-chat-action",
-  "gh-target",
-  "coder-agents-chat-action-user",
-  "coder-agents-chat-action-workflow"
-]);
+var ACTION_LABEL_KEYS = {
+  marker: "coder-agents-chat-action",
+  target: "gh-target",
+  user: "coder-agents-chat-action-user",
+  workflow: "coder-agents-chat-action-workflow"
+};
+var RESERVED_LABEL_KEYS = new Set(Object.values(ACTION_LABEL_KEYS));
 function sanitizeLabelKey(input) {
   const lowered = input.toLowerCase();
   const replaced = lowered.replace(/[^a-z0-9._/-]/g, "-");
@@ -27631,7 +27632,9 @@ class CoderAgentChatAction {
     }
     const ghTarget = `${githubOrg}/${githubRepo}#${githubIssueNumber}`;
     const workflow = process.env.GITHUB_WORKFLOW || undefined;
-    if (!this.inputs.forceNewChat) {
+    if (this.inputs.forceNewChat) {
+      core2.info("force-new-chat=true: skipping chat-reuse lookup");
+    } else {
       const follow = await this.findReuseMatch(ghTarget, resolvedUser.id, workflow, sanitizedKey);
       if (follow) {
         core2.info(`Reusing existing chat: ${follow.id}`);
@@ -27735,12 +27738,12 @@ class CoderAgentChatAction {
   }
   async findReuseMatch(ghTarget, coderUserId, workflow, sanitizedKey) {
     const labels = [
-      `coder-agents-chat-action:true`,
-      `gh-target:${ghTarget}`,
-      `coder-agents-chat-action-user:${coderUserId}`
+      `${ACTION_LABEL_KEYS.marker}:true`,
+      `${ACTION_LABEL_KEYS.target}:${ghTarget}`,
+      `${ACTION_LABEL_KEYS.user}:${coderUserId}`
     ];
     if (workflow) {
-      labels.push(`coder-agents-chat-action-workflow:${workflow}`);
+      labels.push(`${ACTION_LABEL_KEYS.workflow}:${workflow}`);
     }
     if (sanitizedKey) {
       labels.push(`${sanitizedKey}:true`);
@@ -27777,12 +27780,12 @@ class CoderAgentChatAction {
       throw new Error(`idempotency-key sanitizes to a reserved chat-label key ("${sanitizedKey}"). ` + `Reserved keys: ${[...RESERVED_LABEL_KEYS].join(", ")}. ` + "Choose a different idempotency-key value.");
     }
     const labels = {
-      "coder-agents-chat-action": "true",
-      "gh-target": ghTarget,
-      "coder-agents-chat-action-user": coderUserId
+      [ACTION_LABEL_KEYS.marker]: "true",
+      [ACTION_LABEL_KEYS.target]: ghTarget,
+      [ACTION_LABEL_KEYS.user]: coderUserId
     };
     if (workflow) {
-      labels["coder-agents-chat-action-workflow"] = workflow;
+      labels[ACTION_LABEL_KEYS.workflow] = workflow;
     }
     if (sanitizedKey) {
       labels[sanitizedKey] = "true";

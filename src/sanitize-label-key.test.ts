@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { RESERVED_LABEL_KEYS, sanitizeLabelKey } from "./sanitize-label-key";
+import {
+	ACTION_LABEL_KEYS,
+	RESERVED_LABEL_KEYS,
+	sanitizeLabelKey,
+} from "./sanitize-label-key";
 
 describe("sanitizeLabelKey", () => {
 	test("lowercases and replaces disallowed characters with '-'", () => {
@@ -45,5 +49,17 @@ describe("RESERVED_LABEL_KEYS", () => {
 		expect(RESERVED_LABEL_KEYS.has("coder-agents-chat-action-workflow")).toBe(
 			true,
 		);
+	});
+
+	test("is derived from ACTION_LABEL_KEYS so neither table can drift", () => {
+		// `findReuseMatch` and `buildChatLabels` both reference
+		// `ACTION_LABEL_KEYS` for the action-owned label keys; the reserved
+		// set must reserve every one of them. If a developer adds an entry
+		// to `ACTION_LABEL_KEYS` without updating the reserved set, an
+		// `idempotency-key` value matching the new key could silently
+		// overwrite it.
+		for (const key of Object.values(ACTION_LABEL_KEYS)) {
+			expect(RESERVED_LABEL_KEYS.has(key)).toBe(true);
+		}
 	});
 });
