@@ -3482,6 +3482,50 @@ describe("CoderAgentChatAction", () => {
 			expect(outputs.chatCreated).toBe(false);
 		});
 
+		test("default + match + wait=complete: polls until terminal status (no silent skip)", async () => {
+			// Regression test for DEREM-2: the reuse follow-up path must
+			// honor wait=complete the same way the existing-chat-id path
+			// does. A reuse-path follow-up to a chat already in a terminal
+			// status would otherwise return on the pre-message snapshot
+			// before the agent transitions.
+			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
+			coderClient.mockListChats.mockResolvedValue([
+				{ ...mockChat, archived: false, status: "waiting" },
+			]);
+			coderClient.mockCreateChatMessage.mockResolvedValue(
+				mockChatMessageResponse,
+			);
+			// The pre-message status is "waiting" (terminal), so
+			// requireNonTerminalFirst must skip the first poll. Then two
+			// transitions: running -> completed.
+			coderClient.mockGetChat
+				.mockResolvedValueOnce({ ...mockChat, status: "waiting" })
+				.mockResolvedValueOnce({ ...mockChat, status: "running" })
+				.mockResolvedValueOnce({ ...mockChat, status: "completed" });
+
+			const inputs = createMockInputs({
+				githubUserID: 12345,
+				wait: "complete",
+				waitTimeoutSeconds: 600,
+				commentOnIssue: false,
+			});
+			const clock = createFakeClock();
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				createMockContext(),
+				clock,
+			);
+
+			const outputs = await action.run();
+
+			expect(coderClient.mockCreateChatMessage).toHaveBeenCalledTimes(1);
+			expect(coderClient.mockCreateChat).not.toHaveBeenCalled();
+			expect(coderClient.mockGetChat).toHaveBeenCalledTimes(3);
+			expect(outputs.chatStatus).toBe("completed");
+		});
+
 		test("default + getChat refresh fails: returns the pre-message snapshot instead of failing", async () => {
 			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
 			coderClient.mockListChats.mockResolvedValue([

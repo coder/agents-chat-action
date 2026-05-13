@@ -956,68 +956,14 @@ export class CoderAgentChatAction {
 			// `index.ts`, so `.parse()` here is the branding step (and a
 			// defense-in-depth check if a future caller bypasses that schema).
 			const chatId = ChatIdSchema.parse(this.inputs.existingChatId);
-
-			await this.coder.createChatMessage(chatId, {
-				content: [{ type: "text", text: this.inputs.chatPrompt }],
-				model_config_id: this.inputs.modelConfigId,
-			});
-			core.info("Message sent successfully");
-
-			const chatUrl = this.generateChatUrl(chatId);
-
-			// wait=complete polls until terminal. requireNonTerminalFirst
-			// defends against TOCTOU when sending a follow-up to a chat
-			// already in a terminal status (e.g. waiting): the first poll
-			// may see the pre-message status before the agent transitions.
-			//
-			// wait=none does a best-effort one-shot fetch; on fetch failure
-			// log a warning and fall back to minimal outputs. The follow-up
-			// message is already on the wire.
-			let chat: CoderChat | undefined;
-			if (this.inputs.wait === "complete") {
-				core.info(
-					`Waiting for chat to reach terminal status (timeout: ${this.inputs.waitTimeoutSeconds}s)...`,
-				);
-				chat = await this.pollWithContext(
-					chatId,
-					{ coderUsername, chatUrl },
-					{ requireNonTerminalFirst: true },
-				);
-				core.info(`Chat reached terminal status: ${chat.status}`);
-			} else {
-				try {
-					chat = await this.coder.getChat(chatId);
-					core.info(`Chat status: ${chat.status}, title: ${chat.title}`);
-				} catch (error) {
-					core.warning(
-						`Failed to fetch chat after sending message; outputs will be minimal: ${error}`,
-					);
-				}
-			}
-
-			if (this.inputs.commentOnIssue) {
-				core.info(
-					`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`,
-				);
-				await this.commentOnIssue({
-					chatUrl,
-					owner: githubOrg,
-					repo: githubRepo,
-					issueNumber: githubIssueNumber,
-					chatCreated: false,
-					chat,
-				});
-			}
-
-			if (chat) {
-				return this.buildOutputs(coderUsername, chat, false);
-			}
-			return {
+			return this.runFollowUp({
 				coderUsername,
 				chatId,
-				chatUrl,
-				chatCreated: false,
-			};
+				preMessageChat: undefined,
+				githubOrg,
+				githubRepo,
+				githubIssueNumber,
+			});
 		}
 
 		// Chat reuse: the action reuses the most recent non-archived chat
@@ -1049,42 +995,14 @@ export class CoderAgentChatAction {
 			);
 			if (follow) {
 				core.info(`Reusing existing chat: ${follow.id}`);
-				await this.coder.createChatMessage(follow.id, {
-					content: [{ type: "text", text: this.inputs.chatPrompt }],
-					model_config_id: this.inputs.modelConfigId,
+				return this.runFollowUp({
+					coderUsername,
+					chatId: follow.id,
+					preMessageChat: follow,
+					githubOrg,
+					githubRepo,
+					githubIssueNumber,
 				});
-				core.info("Message sent successfully");
-				const chatUrl = this.generateChatUrl(follow.id);
-
-				// Refresh so outputs reflect post-message state. The message
-				// already succeeded; on fetch failure, fall back to the
-				// pre-message chat rather than failing the run.
-				let refreshed: CoderChat = follow;
-				try {
-					const fetched = await this.coder.getChat(follow.id);
-					core.info(`Chat status: ${fetched.status}, title: ${fetched.title}`);
-					refreshed = fetched;
-				} catch (error) {
-					core.warning(
-						`Failed to fetch chat after sending message; outputs reflect pre-message state: ${error}`,
-					);
-				}
-
-				if (this.inputs.commentOnIssue) {
-					core.info(
-						`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`,
-					);
-					await this.commentOnIssue({
-						chatUrl,
-						owner: githubOrg,
-						repo: githubRepo,
-						issueNumber: githubIssueNumber,
-						chatCreated: false,
-						chat: refreshed,
-					});
-				}
-
-				return this.buildOutputs(coderUsername, refreshed, false);
 			}
 		}
 
@@ -1152,6 +1070,94 @@ export class CoderAgentChatAction {
 		return this.buildOutputs(coderUsername, finalChat, true);
 	}
 
+	/**
+	 * Send `chat-prompt` as a follow-up message to an existing chat and
+	 * complete the post-message flow (poll under `wait: complete`, refresh
+	 * under `wait: none`, comment, build outputs). Used by both the
+	 * `existing-chat-id` path (no pre-message snapshot, falls back to a
+	 * minimal outputs shim on refresh failure) and the chat-reuse path
+	 * (the matched chat is the pre-message snapshot, so refresh failure
+	 * preserves the matched chat's state).
+	 *
+	 * Under `wait: complete`, both paths poll with `requireNonTerminalFirst`
+	 * to defend against TOCTOU when the chat was already in a terminal
+	 * status when the follow-up was sent: the first poll may still see the
+	 * pre-message status before the agent transitions.
+	 */
+	private async runFollowUp(args: {
+		coderUsername: string;
+		chatId: ChatId;
+		preMessageChat: CoderChat | undefined;
+		githubOrg: string;
+		githubRepo: string;
+		githubIssueNumber: number;
+	}): Promise<ActionOutputs> {
+		const {
+			coderUsername,
+			chatId,
+			preMessageChat,
+			githubOrg,
+			githubRepo,
+			githubIssueNumber,
+		} = args;
+
+		await this.coder.createChatMessage(chatId, {
+			content: [{ type: "text", text: this.inputs.chatPrompt }],
+			model_config_id: this.inputs.modelConfigId,
+		});
+		core.info("Message sent successfully");
+
+		const chatUrl = this.generateChatUrl(chatId);
+
+		let chat: CoderChat | undefined = preMessageChat;
+		if (this.inputs.wait === "complete") {
+			core.info(
+				`Waiting for chat to reach terminal status (timeout: ${this.inputs.waitTimeoutSeconds}s)...`,
+			);
+			chat = await this.pollWithContext(
+				chatId,
+				{ coderUsername, chatUrl },
+				{ requireNonTerminalFirst: true },
+			);
+			core.info(`Chat reached terminal status: ${chat.status}`);
+		} else {
+			try {
+				const fetched = await this.coder.getChat(chatId);
+				core.info(`Chat status: ${fetched.status}, title: ${fetched.title}`);
+				chat = fetched;
+			} catch (error) {
+				core.warning(
+					preMessageChat
+						? `Failed to fetch chat after sending message; outputs reflect pre-message state: ${error}`
+						: `Failed to fetch chat after sending message; outputs will be minimal: ${error}`,
+				);
+			}
+		}
+
+		if (this.inputs.commentOnIssue) {
+			core.info(
+				`Commenting on issue ${githubOrg}/${githubRepo}#${githubIssueNumber}`,
+			);
+			await this.commentOnIssue({
+				chatUrl,
+				owner: githubOrg,
+				repo: githubRepo,
+				issueNumber: githubIssueNumber,
+				chatCreated: false,
+				chat,
+			});
+		}
+
+		if (chat) {
+			return this.buildOutputs(coderUsername, chat, false);
+		}
+		return {
+			coderUsername,
+			chatId,
+			chatUrl,
+			chatCreated: false,
+		};
+	}
 	/**
 	 * Most-recent non-archived chat matching the reuse scope, or undefined.
 	 * Scope: gh-target + coder-user; workflow when GITHUB_WORKFLOW is set;
