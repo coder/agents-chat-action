@@ -38,7 +38,7 @@ jobs:
           github-token: ${{ github.token }}
 ```
 
-The chat runs under the Coder user linked to the GitHub user who applied the label, while the chat itself is owned by the user the `coder-token` belongs to. Set `coder-username` to override the acting user (used for org pick and the per-user reuse label); see [Identity](#identity-resolution) and [Security](#security-model) for the full model.
+The chat runs under the Coder user linked to the GitHub user who applied the label, while the chat itself is owned by the user the `coder-token` belongs to. Set `acting-coder-username` to override the acting user (used for org pick and the per-user reuse label); see [Identity](#identity-resolution) and [Security](#security-model) for the full model.
 
 ## Inputs
 
@@ -49,8 +49,8 @@ The chat runs under the Coder user linked to the GitHub user who applied the lab
 | `chat-prompt`          | yes      |         | Prompt to send to the agent. |
 | `github-url`           | yes      |         | Issue or pull request URL. |
 | `github-token`         | yes      |         | Used to post and update comments. |
-| `coder-username`       | no       |         | Override the acting Coder user used for org pick and the per-user reuse label. Mutually exclusive with `github-user-id`. Bypasses the [trust gate](#security-model). Does NOT change the chat owner; the chat is always owned by the `coder-token` holder. |
-| `github-user-id`       | no       |         | Resolve the acting Coder user from a linked GitHub id. Mutually exclusive with `coder-username`. Does NOT change the chat owner. |
+| `acting-coder-username`       | no       |         | Override the acting Coder user used for org pick and the per-user reuse label. Mutually exclusive with `acting-github-user-id`. Bypasses the [trust gate](#security-model). Does NOT change the chat owner; the chat is always owned by the `coder-token` holder. |
+| `acting-github-user-id`       | no       |         | Resolve the acting Coder user from a linked GitHub id. Mutually exclusive with `acting-coder-username`. Does NOT change the chat owner. |
 | `coder-organization`   | no       |         | Coder organization name. Recommended for multi-org users. |
 | `workspace-id`         | no       |         | Pin the chat to an existing workspace. |
 | `model-config-id`      | no       |         | Model configuration to use. |
@@ -70,7 +70,7 @@ The chat runs under the Coder user linked to the GitHub user who applied the lab
 | `chat-created`        | `true` if newly created, `false` if a message was sent to an existing chat. |
 | `chat-status`         | `waiting`, `pending`, `running`, `paused`, `completed`, `error`. |
 | `chat-title`          | Chat title. |
-| `coder-username`      | Acting Coder username (org pick, reuse label). The chat owner is the `coder-token` holder, which may differ. |
+| `acting-coder-username`      | Acting Coder username (org pick, reuse label). The chat owner is the `coder-token` holder, which may differ. |
 | `workspace-id`        | Workspace UUID. |
 | `pull-request-url`    | PR or branch URL when the chat tracks changes. |
 | `pull-request-state`  | `open`, `closed`, `merged`. |
@@ -92,13 +92,13 @@ PR/diff outputs come from the chat's `diff_status` and are only reliable when th
 
 The chat itself is always owned by the user the `coder-token` belongs to: `POST /api/experimental/chats` has no owner override, so the API binds ownership to the session. The action separately resolves an **acting user** used for org pick and the per-user reuse label (`coder-agents-chat-action-user`). First source wins:
 
-1. `coder-username` input. Used directly.
-2. `github-user-id` input. Looked up by linked GitHub id; deleted Coder users are filtered.
+1. `acting-coder-username` input. Used directly.
+2. `acting-github-user-id` input. Looked up by linked GitHub id; deleted Coder users are filtered.
 3. `github.context.payload.sender.id`. Available on most webhook events.
 4. `github.context.actor`. Resolved to a GitHub id via Octokit.
 5. `GET /api/v2/users/me` against the configured `coder-token`. Used when no input or workflow-context signal applies (`schedule` events, `workflow_dispatch` without sender or actor, custom `repository_dispatch` chains).
 
-If the acting user resolves via `coder-username` or `github-user-id` and the result differs from the `coder-token` owner, the action emits a `core.warning` naming both usernames. The chat is still owned by the token holder; the warning surfaces the divergence so the workflow author can confirm the token belongs to the intended user.
+If the acting user resolves via `acting-coder-username` or `acting-github-user-id` and the result differs from the `coder-token` owner, the action emits a `core.warning` naming both usernames. The chat is still owned by the token holder; the warning surfaces the divergence so the workflow author can confirm the token belongs to the intended user.
 
 ### Organization resolution
 
@@ -163,7 +163,7 @@ jobs:
           coder-url: ${{ secrets.CODER_URL }}
           coder-token: ${{ secrets.CODER_TOKEN }}
           coder-organization: ${{ secrets.CODER_ORG }}  # required if the bot belongs to more than one org
-          coder-username: doc-check-bot
+          acting-coder-username: doc-check-bot
           chat-prompt: |
             Use the doc-check skill to review PR
             ${{ github.event.pull_request.html_url }}.
@@ -225,8 +225,8 @@ The action sets `chat-error-kind` and `chat-error-message` on failure, posts a c
 | `chat-error-kind` | What happened | What to do |
 | ----------------- | ------------- | ---------- |
 | `spend_exceeded`  | Chat spend limit reached. Spent and limit are in the comment. | Wait for reset or raise the deployment's per-user limit. |
-| `user_not_found`  | No Coder user matched the GitHub identity. | Pass `coder-username`, or have the user link their GitHub account in Coder. |
-| `user_ambiguous`  | Multiple live Coder users share the GitHub id. | Set `coder-username` to disambiguate. |
+| `user_not_found`  | No Coder user matched the GitHub identity. | Pass `acting-coder-username`, or have the user link their GitHub account in Coder. |
+| `user_ambiguous`  | Multiple live Coder users share the GitHub id. | Set `acting-coder-username` to disambiguate. |
 | `org_not_found`   | Org missing or the user has no memberships. The comment names which. | Fix or set `coder-organization`. |
 | `api_error`       | Any other Coder API error. The comment includes the underlying message; wrapped errors carry the original `CoderAPIError` via `Error.cause` and the workflow log renders the full cause chain. | Common causes: bad token, bad `workspace-id`, deployment unreachable. |
 | `timeout`         | `wait: complete` didn't reach terminal in time. | Raise `wait-timeout-seconds`, or split the work. |
@@ -247,7 +247,7 @@ The **acting user** is the Coder identity resolved for org pick and the per-user
 - The trigger is a fork pull request (`head.repo` null, `head.repo.fork === true`, or `head.repo.full_name !== base.repo.full_name`).
 - The trigger is a comment or review whose `comment.author_association` or `review.author_association` is not `OWNER`, `MEMBER`, or `COLLABORATOR`.
 
-Without the gate, an attacker who happens to have a linked Coder identity could open a fork PR or drop a drive-by comment and the action would attribute the chat (org pick, reuse label) to that identity. On refusal, the action does not fall back to `users/me`: a hostile trigger should not silently collapse onto the token owner. Setting `coder-username` or `github-user-id` bypasses the gate; the workflow author has chosen the identity explicitly.
+Without the gate, an attacker who happens to have a linked Coder identity could open a fork PR or drop a drive-by comment and the action would attribute the chat (org pick, reuse label) to that identity. On refusal, the action does not fall back to `users/me`: a hostile trigger should not silently collapse onto the token owner. Setting `acting-coder-username` or `acting-github-user-id` bypasses the gate; the workflow author has chosen the identity explicitly.
 
 The gate does not read `issue.author_association` or `pull_request.author_association` because those describe the resource opener, not the event sender (a MEMBER labeling a NONE user's issue is fine).
 

@@ -5,7 +5,7 @@ import { RealCoderClient } from "./coder-client";
 import { setActionOutputs, setFailureOutputs } from "./outputs";
 import { ActionInputsSchema } from "./schemas";
 
-// Convert the `github-user-id` workflow input to a number, or return
+// Convert the `acting-github-user-id` workflow input to a number, or return
 // undefined when unset. Returns NaN for anything that isn't a plain
 // decimal integer literal so it fails schema parse instead of silently
 // resolving to the wrong Coder user. `Number()` alone is too permissive:
@@ -21,7 +21,9 @@ export function parseGithubUserID(raw: string): number | undefined {
 
 async function main() {
 	try {
-		const githubUserID = parseGithubUserID(core.getInput("github-user-id"));
+		const githubUserID = parseGithubUserID(
+			core.getInput("acting-github-user-id"),
+		);
 
 		const inputs = ActionInputsSchema.parse({
 			coderURL: core.getInput("coder-url", { required: true }),
@@ -31,7 +33,7 @@ async function main() {
 			githubURL: core.getInput("github-url", { required: true }),
 			githubToken: core.getInput("github-token", { required: true }),
 			githubUserID,
-			coderUsername: core.getInput("coder-username") || undefined,
+			coderUsername: core.getInput("acting-coder-username") || undefined,
 			workspaceId: core.getInput("workspace-id") || undefined,
 			modelConfigId: core.getInput("model-config-id") || undefined,
 			existingChatId: core.getInput("existing-chat-id") || undefined,

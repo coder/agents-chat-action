@@ -98,7 +98,7 @@ describe("ActionInputsSchema", () => {
 			}
 		});
 
-		test("accepts both github-user-id and coder-username unset", () => {
+		test("accepts both acting-github-user-id and acting-coder-username unset", () => {
 			const { githubUserID: _, ...withoutGithubUserID } = actionInputValid;
 			const result = ActionInputsSchema.parse(withoutGithubUserID);
 			expect(result.githubUserID).toBeUndefined();
@@ -181,7 +181,9 @@ describe("ActionInputsSchema", () => {
 				...actionInputValid,
 				coderUsername: "testuser",
 			};
-			expect(() => ActionInputsSchema.parse(input)).toThrow();
+			expect(() => ActionInputsSchema.parse(input)).toThrow(
+				/acting-github-user-id and acting-coder-username/,
+			);
 		});
 
 		test("rejects input with both existingChatId and forceNewChat", () => {

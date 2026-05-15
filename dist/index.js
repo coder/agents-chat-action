@@ -27090,10 +27090,10 @@ function buildFailureCommentBody(detail, ctx) {
       lines.push("", linkLine);
       break;
     case "user_not_found":
-      lines.push("No Coder user could be resolved for this run. Adjust either " + "the `github-user-id` input (the GitHub identity is not linked " + "to a Coder user) or pass `coder-username` directly.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", linkLine);
+      lines.push("No Coder user could be resolved for this run. Adjust either " + "the `acting-github-user-id` input (the GitHub identity is not " + "linked to a Coder user) or pass `acting-coder-username` directly.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", linkLine);
       break;
     case "user_ambiguous":
-      lines.push("Multiple Coder users matched the GitHub identity. Set the " + "`coder-username` input to the specific account this workflow " + "should run as.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", linkLine);
+      lines.push("Multiple Coder users matched the GitHub identity. Set the " + "`acting-coder-username` input to the specific account this " + "workflow should run as.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", linkLine);
       break;
     case "org_not_found":
       lines.push("The resolved Coder user has no matching organization. Set the " + "`coder-organization` input or grant the user a membership.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", linkLine);
@@ -27475,14 +27475,14 @@ class CoderAgentChatAction {
         coderUser = await this.coder.getCoderUserByUsername(this.inputs.coderUsername);
       } catch (err) {
         if (err instanceof CoderAPIError && err.statusCode === 404) {
-          throw new ActionFailureError("user_not_found", `Coder user '${this.inputs.coderUsername}' not found. ` + "Check the `coder-username` input value.", undefined, { cause: err });
+          throw new ActionFailureError("user_not_found", `Coder user '${this.inputs.coderUsername}' not found. ` + "Check the `acting-coder-username` input value.", undefined, { cause: err });
         }
         throw err;
       }
       return {
         username: coderUser.username,
         user: coderUser,
-        source: "coder-username"
+        source: "acting-coder-username"
       };
     }
     if (this.inputs.githubUserID !== undefined) {
@@ -27491,14 +27491,14 @@ class CoderAgentChatAction {
       return {
         username: coderUser.username,
         user: coderUser,
-        source: "github-user-id"
+        source: "acting-github-user-id"
       };
     }
     const isSchedule = this.context.eventName === "schedule";
     if (!isSchedule) {
       const trust = classifyAutoResolveTrust(this.context);
       if (trust.kind === "untrusted") {
-        throw new Error("Refusing to auto-resolve a GitHub identity: " + `${trust.reason}. ` + "Set the `coder-username` input to a Coder username, or set " + "`github-user-id` to the GitHub numeric user id of the user " + "the chat should run as.");
+        throw new Error("Refusing to auto-resolve a GitHub identity: " + `${trust.reason}. ` + "Set the `acting-coder-username` input to a Coder username, or set " + "`acting-github-user-id` to the GitHub numeric user id of the user " + "the chat should run as.");
       }
       if (trust.kind === "trusted") {
         core2.info(`Auto-resolve trust check passed: ${trust.reason}`);
@@ -27514,7 +27514,7 @@ class CoderAgentChatAction {
             source: "sender"
           };
         } catch (err) {
-          throw new Error(`Failed to resolve Coder user from github.context.payload.sender.id (${senderId}): ${describeError(err)}. ` + "Set the `coder-username` input to bypass auto-resolution.");
+          throw new Error(`Failed to resolve Coder user from github.context.payload.sender.id (${senderId}): ${describeError(err)}. ` + "Set the `acting-coder-username` input to bypass auto-resolution.");
         }
       }
       const actor = this.context.actor;
@@ -27527,7 +27527,7 @@ class CoderAgentChatAction {
           });
           actorId = data.id;
         } catch (err) {
-          throw new Error(`Failed to resolve GitHub user id for github.context.actor (${actor}): ${describeError(err)}. ` + "Set the `coder-username` input to bypass auto-resolution.");
+          throw new Error(`Failed to resolve GitHub user id for github.context.actor (${actor}): ${describeError(err)}. ` + "Set the `acting-coder-username` input to bypass auto-resolution.");
         }
         try {
           const coderUser = await this.coder.getCoderUserByGitHubId(actorId);
@@ -27537,7 +27537,7 @@ class CoderAgentChatAction {
             source: "actor"
           };
         } catch (err) {
-          throw new Error(`Failed to resolve Coder user for github.context.actor (${actor}, GitHub user id ${actorId}): ${describeError(err)}. ` + "Set the `coder-username` input to bypass auto-resolution.");
+          throw new Error(`Failed to resolve Coder user for github.context.actor (${actor}, GitHub user id ${actorId}): ${describeError(err)}. ` + "Set the `acting-coder-username` input to bypass auto-resolution.");
         }
       }
     }
@@ -27546,7 +27546,7 @@ class CoderAgentChatAction {
     try {
       tokenOwner = await this.getTokenOwner();
     } catch (err) {
-      throw new Error(`Failed to resolve the \`coder-token\` owner via GET /api/v2/users/me: ${describeError(err)}. ` + "Set the `coder-username` input to a Coder username, or set " + "`github-user-id` to the GitHub numeric user id of the user the " + "chat should run as.");
+      throw new Error(`Failed to resolve the \`coder-token\` owner via GET /api/v2/users/me: ${describeError(err)}. ` + "Set the `acting-coder-username` input to a Coder username, or set " + "`acting-github-user-id` to the GitHub numeric user id of the user the " + "chat should run as.");
     }
     return {
       username: tokenOwner.username,
@@ -27564,7 +27564,7 @@ class CoderAgentChatAction {
     return user;
   }
   async warnOnTokenOwnerDivergence(resolved) {
-    if (resolved.source !== "coder-username" && resolved.source !== "github-user-id") {
+    if (resolved.source !== "acting-coder-username" && resolved.source !== "acting-github-user-id") {
       return;
     }
     let tokenOwner;
@@ -27600,7 +27600,7 @@ class CoderAgentChatAction {
         user = await this.coder.getCoderUserByUsername(coderUsername);
       } catch (err) {
         if (err instanceof CoderAPIError && err.statusCode === 404) {
-          throw new ActionFailureError("user_not_found", `Coder user '${coderUsername}' not found. ` + "Check the `coder-username` input value.", undefined, { cause: err });
+          throw new ActionFailureError("user_not_found", `Coder user '${coderUsername}' not found. ` + "Check the `acting-coder-username` input value.", undefined, { cause: err });
         }
         throw err;
       }
@@ -27863,7 +27863,7 @@ class CoderAgentChatAction {
 // src/outputs.ts
 var core3 = __toESM(require_core(), 1);
 var OUTPUT_MAP = [
-  { name: "coder-username", prop: "coderUsername", required: true },
+  { name: "acting-coder-username", prop: "coderUsername", required: true },
   { name: "chat-id", prop: "chatId", required: true },
   { name: "chat-url", prop: "chatUrl", required: true },
   { name: "chat-created", prop: "chatCreated", required: true },
@@ -27905,7 +27905,7 @@ function setFailureOutputs(error3) {
     core3.setOutput("chat-url", error3.chatUrl);
   }
   if (error3.coderUsername) {
-    core3.setOutput("coder-username", error3.coderUsername);
+    core3.setOutput("acting-coder-username", error3.coderUsername);
   }
 }
 
@@ -27930,7 +27930,7 @@ var ActionInputsObjectSchema = exports_external.object({
   forceNewChat: exports_external.boolean().default(false)
 });
 var ActionInputsSchema = ActionInputsObjectSchema.refine((data) => !(data.githubUserID !== undefined && data.coderUsername !== undefined), {
-  message: "Cannot set both github-user-id and coder-username; choose one.",
+  message: "Cannot set both acting-github-user-id and acting-coder-username; choose one.",
   path: ["coderUsername"]
 }).refine((data) => !(data.existingChatId !== undefined && data.forceNewChat === true), {
   message: "Cannot set both existing-chat-id and force-new-chat; choose one.",
@@ -27975,7 +27975,7 @@ function parseGithubUserID(raw) {
 }
 async function main() {
   try {
-    const githubUserID = parseGithubUserID(core4.getInput("github-user-id"));
+    const githubUserID = parseGithubUserID(core4.getInput("acting-github-user-id"));
     const inputs = ActionInputsSchema.parse({
       coderURL: core4.getInput("coder-url", { required: true }),
       coderToken: core4.getInput("coder-token", { required: true }),
@@ -27984,7 +27984,7 @@ async function main() {
       githubURL: core4.getInput("github-url", { required: true }),
       githubToken: core4.getInput("github-token", { required: true }),
       githubUserID,
-      coderUsername: core4.getInput("coder-username") || undefined,
+      coderUsername: core4.getInput("acting-coder-username") || undefined,
       workspaceId: core4.getInput("workspace-id") || undefined,
       modelConfigId: core4.getInput("model-config-id") || undefined,
       existingChatId: core4.getInput("existing-chat-id") || undefined,

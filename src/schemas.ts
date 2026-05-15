@@ -4,10 +4,10 @@ import { z } from "zod";
 // in sync if either changes.
 export const DEFAULT_WAIT_TIMEOUT_SECONDS = 600;
 
-// Mutual exclusion of github-user-id and coder-username is enforced by
-// the wrapper schema below. Both identity inputs are optional at the
-// object level so the runtime can later auto-resolve from the workflow
-// context.
+// Mutual exclusion of acting-github-user-id and acting-coder-username is
+// enforced by the wrapper schema below. Both identity inputs are optional
+// at the object level so the runtime can later auto-resolve from the
+// workflow context.
 const ActionInputsObjectSchema = z.object({
 	chatPrompt: z.string().min(1),
 	coderToken: z.string().min(1),
@@ -35,7 +35,8 @@ export const ActionInputsSchema = ActionInputsObjectSchema.refine(
 	(data) =>
 		!(data.githubUserID !== undefined && data.coderUsername !== undefined),
 	{
-		message: "Cannot set both github-user-id and coder-username; choose one.",
+		message:
+			"Cannot set both acting-github-user-id and acting-coder-username; choose one.",
 		path: ["coderUsername"],
 	},
 ).refine(

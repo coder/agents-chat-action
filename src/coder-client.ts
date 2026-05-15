@@ -158,7 +158,7 @@ export class RealCoderClient implements CoderClient {
 			return CoderSDKUserSchema.parse(response);
 		} catch (err) {
 			// Re-throw 404 with the `user_not_found` kind so `classifyError`
-			// routes a typo in `coder-username` to the helpful failure
+			// routes a typo in `acting-coder-username` to the helpful failure
 			// comment rather than a generic `api_error`.
 			if (err instanceof CoderAPIError && err.statusCode === 404) {
 				throw new CoderAPIError(

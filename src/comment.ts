@@ -262,8 +262,8 @@ export function buildFailureCommentBody(
 		case "user_not_found":
 			lines.push(
 				"No Coder user could be resolved for this run. Adjust either " +
-					"the `github-user-id` input (the GitHub identity is not linked " +
-					"to a Coder user) or pass `coder-username` directly.",
+					"the `acting-github-user-id` input (the GitHub identity is not " +
+					"linked to a Coder user) or pass `acting-coder-username` directly.",
 				"",
 				`- chat-error-kind=${detail.kind}`,
 				`- Detail: ${detail.message}`,
@@ -274,8 +274,8 @@ export function buildFailureCommentBody(
 		case "user_ambiguous":
 			lines.push(
 				"Multiple Coder users matched the GitHub identity. Set the " +
-					"`coder-username` input to the specific account this workflow " +
-					"should run as.",
+					"`acting-coder-username` input to the specific account this " +
+					"workflow should run as.",
 				"",
 				`- chat-error-kind=${detail.kind}`,
 				`- Detail: ${detail.message}`,

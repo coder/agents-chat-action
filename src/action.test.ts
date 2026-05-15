@@ -603,7 +603,7 @@ describe("CoderAgentChatAction", () => {
 		});
 	});
 
-	test("creates chat using direct coder-username", async () => {
+	test("creates chat using direct acting-coder-username", async () => {
 		coderClient.mockCreateChat.mockResolvedValue(mockChat);
 
 		const inputs = createMockInputs({
@@ -851,7 +851,7 @@ describe("CoderAgentChatAction", () => {
 	});
 
 	describe("Identity resolution", () => {
-		test("uses coder-username directly without GitHub-id lookup", async () => {
+		test("uses acting-coder-username directly without GitHub-id lookup", async () => {
 			coderClient.mockCreateChat.mockResolvedValue(mockChat);
 
 			const inputs = createMockInputs({
@@ -877,7 +877,7 @@ describe("CoderAgentChatAction", () => {
 			expect(result.coderUsername).toBe(mockUser.username);
 		});
 
-		test("prefers coder-username over github-user-id when both bypass the schema", async () => {
+		test("prefers acting-coder-username over acting-github-user-id when both bypass the schema", async () => {
 			// The Zod schema rejects setting both inputs simultaneously, but the
 			// resolver is a unit and the precedence #1 vs #2 must hold even if a
 			// future caller bypasses the schema. Constructing the action directly
@@ -903,7 +903,7 @@ describe("CoderAgentChatAction", () => {
 			expect(result.coderUsername).toBe(mockUser.username);
 		});
 
-		test("looks up by github-user-id when set", async () => {
+		test("looks up by acting-github-user-id when set", async () => {
 			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
 			coderClient.mockCreateChat.mockResolvedValue(mockChat);
 
@@ -998,7 +998,7 @@ describe("CoderAgentChatAction", () => {
 		});
 
 		test("treats sender id of 0 as missing and falls through to actor", async () => {
-			// Mirrors the Zod schema's positive constraint on `github-user-id`.
+			// Mirrors the Zod schema's positive constraint on `acting-github-user-id`.
 			// Without the guard, `0` reaches a bare-string throw inside the
 			// Coder client and surfaces as "Unknown error occurred".
 			octokit.rest.users.getByUsername.mockResolvedValue({
@@ -1036,7 +1036,7 @@ describe("CoderAgentChatAction", () => {
 		});
 
 		test("treats non-integer sender id as missing and falls through to actor", async () => {
-			// Mirrors the Zod schema's `.int()` constraint on `github-user-id`.
+			// Mirrors the Zod schema's `.int()` constraint on `acting-github-user-id`.
 			// GitHub user IDs are integers in practice, but the runtime guard
 			// should match the schema's shape rather than admitting `1.5`.
 			octokit.rest.users.getByUsername.mockResolvedValue({
@@ -1245,8 +1245,8 @@ describe("CoderAgentChatAction", () => {
 			const message = (caught as Error).message;
 			expect(message).toContain("users/me");
 			expect(message).toContain("401 Unauthorized");
-			expect(message).toContain("coder-username");
-			expect(message).toContain("github-user-id");
+			expect(message).toContain("acting-coder-username");
+			expect(message).toContain("acting-github-user-id");
 		});
 
 		test("does not fall back to users/me when the trust gate refuses", async () => {
@@ -1285,7 +1285,7 @@ describe("CoderAgentChatAction", () => {
 			expect(caught).toBeInstanceOf(Error);
 			const message = (caught as Error).message;
 			expect(message).toContain("fork");
-			expect(message).toContain("coder-username");
+			expect(message).toContain("acting-coder-username");
 			expect(coderClient.mockGetAuthenticatedUser).not.toHaveBeenCalled();
 		});
 
@@ -1322,7 +1322,7 @@ describe("CoderAgentChatAction", () => {
 			expect(message).toContain(
 				"No Coder user found with GitHub user ID 424242",
 			);
-			expect(message).toContain("coder-username");
+			expect(message).toContain("acting-coder-username");
 		});
 
 		test("wraps actor getByUsername failure with source and bypass instructions", async () => {
@@ -1357,7 +1357,7 @@ describe("CoderAgentChatAction", () => {
 			expect(message).toContain("github.context.actor");
 			expect(message).toContain("missing-user");
 			expect(message).toContain("Not Found");
-			expect(message).toContain("coder-username");
+			expect(message).toContain("acting-coder-username");
 			expect(coderClient.mockGetCoderUserByGithubID).not.toHaveBeenCalled();
 		});
 
@@ -1397,7 +1397,7 @@ describe("CoderAgentChatAction", () => {
 			expect(message).toContain("octocat");
 			expect(message).toContain("555");
 			expect(message).toContain("No Coder user found with GitHub user ID 555");
-			expect(message).toContain("coder-username");
+			expect(message).toContain("acting-coder-username");
 		});
 
 		test("refuses auto-resolve on a fork pull request even with a sender.id", async () => {
@@ -1438,8 +1438,8 @@ describe("CoderAgentChatAction", () => {
 			expect(caught).toBeInstanceOf(Error);
 			const message = (caught as Error).message;
 			expect(message).toContain("fork");
-			expect(message).toContain("coder-username");
-			expect(message).toContain("github-user-id");
+			expect(message).toContain("acting-coder-username");
+			expect(message).toContain("acting-github-user-id");
 			expect(coderClient.mockGetCoderUserByGithubID).not.toHaveBeenCalled();
 			expect(octokit.rest.users.getByUsername).not.toHaveBeenCalled();
 		});
@@ -1551,7 +1551,7 @@ describe("CoderAgentChatAction", () => {
 			const message = (caught as Error).message;
 			expect(message).toContain("CONTRIBUTOR");
 			expect(message).toContain("author_association");
-			expect(message).toContain("coder-username");
+			expect(message).toContain("acting-coder-username");
 			expect(coderClient.mockGetCoderUserByGithubID).not.toHaveBeenCalled();
 		});
 
@@ -1723,7 +1723,7 @@ describe("CoderAgentChatAction", () => {
 			await expect(action.run()).rejects.toThrow(/NONE/);
 		});
 
-		test("coder-username bypasses the trust gate on a fork PR", async () => {
+		test("acting-coder-username bypasses the trust gate on a fork PR", async () => {
 			// Workflow author explicitly opted into running as a known
 			// service-account identity. The trust gate must not refuse: the
 			// fork PR's prompt is still attacker-controlled, but the workflow
@@ -1762,7 +1762,7 @@ describe("CoderAgentChatAction", () => {
 			expect(coderClient.mockGetCoderUserByGithubID).not.toHaveBeenCalled();
 		});
 
-		test("github-user-id bypasses the trust gate on a fork PR", async () => {
+		test("acting-github-user-id bypasses the trust gate on a fork PR", async () => {
 			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
 			coderClient.mockCreateChat.mockResolvedValue(mockChat);
 
@@ -1828,7 +1828,7 @@ describe("CoderAgentChatAction", () => {
 	});
 
 	describe("Token-owner divergence", () => {
-		test("warns when coder-username differs from the coder-token owner", async () => {
+		test("warns when acting-coder-username differs from the coder-token owner", async () => {
 			const actingUser = {
 				...mockUser,
 				id: "aa0e8400-e29b-41d4-a716-446655440099",
@@ -1875,7 +1875,7 @@ describe("CoderAgentChatAction", () => {
 			}
 		});
 
-		test("warns when github-user-id resolves to a user different from the token owner", async () => {
+		test("warns when acting-github-user-id resolves to a user different from the token owner", async () => {
 			const actingUser = {
 				...mockUser,
 				id: "aa0e8400-e29b-41d4-a716-44665544aaaa",
@@ -1917,7 +1917,7 @@ describe("CoderAgentChatAction", () => {
 			}
 		});
 
-		test("does not warn when coder-username matches the coder-token owner", async () => {
+		test("does not warn when acting-coder-username matches the coder-token owner", async () => {
 			coderClient.mockGetCoderUserByUsername.mockResolvedValue(mockUser);
 			coderClient.mockGetAuthenticatedUser.mockResolvedValue(mockUser);
 			coderClient.mockCreateChat.mockResolvedValue(mockChat);
@@ -2884,8 +2884,8 @@ describe("CoderAgentChatAction", () => {
 					| { body: string }
 					| undefined;
 				expect(call?.body).toContain("chat-error-kind=user_not_found");
-				expect(call?.body).toContain("github-user-id");
-				expect(call?.body).toContain("coder-username");
+				expect(call?.body).toContain("acting-github-user-id");
+				expect(call?.body).toContain("acting-coder-username");
 				expect(call?.body).toContain(
 					"<!-- coder-agents-chat-action:test-org/test-repo#123 -->",
 				);
@@ -2894,7 +2894,7 @@ describe("CoderAgentChatAction", () => {
 
 		test(
 			"posts a failure comment with chat-error-kind=user_ambiguous and " +
-				"suggests coder-username",
+				"suggests acting-coder-username",
 			async () => {
 				coderClient.mockGetCoderUserByGithubID.mockRejectedValue(
 					new CoderAPIError(
@@ -2926,7 +2926,7 @@ describe("CoderAgentChatAction", () => {
 					| { body: string }
 					| undefined;
 				expect(call?.body).toContain("chat-error-kind=user_ambiguous");
-				expect(call?.body).toContain("coder-username");
+				expect(call?.body).toContain("acting-coder-username");
 				expect(call?.body).toContain(
 					"<!-- coder-agents-chat-action:test-org/test-repo#123 -->",
 				);
@@ -3290,7 +3290,7 @@ describe("CoderAgentChatAction", () => {
 			);
 		});
 
-		test("defaults via getCoderUserByUsername when only coder-username is set", async () => {
+		test("defaults via getCoderUserByUsername when only acting-coder-username is set", async () => {
 			coderClient.mockGetCoderUserByUsername.mockResolvedValue(mockUser);
 			coderClient.mockCreateChat.mockResolvedValue(mockChat);
 
@@ -3997,7 +3997,7 @@ describe("CoderAgentChatAction", () => {
 			);
 		});
 
-		test("coder-username path: per-user scope is applied via getCoderUserByUsername", async () => {
+		test("acting-coder-username path: per-user scope is applied via getCoderUserByUsername", async () => {
 			coderClient.mockGetCoderUserByUsername.mockResolvedValue(mockUser);
 			coderClient.mockListChats.mockResolvedValue([]);
 			coderClient.mockCreateChat.mockResolvedValue(mockChat);

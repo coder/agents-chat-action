@@ -244,19 +244,19 @@ describe("buildFailureCommentBody", () => {
 		};
 		const body = buildFailureCommentBody(detail, { chatsUrl, marker });
 		expect(body).toContain("chat-error-kind=user_not_found");
-		expect(body).toContain("github-user-id");
-		expect(body).toContain("coder-username");
+		expect(body).toContain("acting-github-user-id");
+		expect(body).toContain("acting-coder-username");
 		expect(body.endsWith(marker)).toBe(true);
 	});
 
-	test("user_ambiguous body suggests coder-username and ends with marker", () => {
+	test("user_ambiguous body suggests acting-coder-username and ends with marker", () => {
 		const detail: FailureDetail = {
 			kind: "user_ambiguous",
 			message: "Multiple Coder users found with GitHub user ID 12345",
 		};
 		const body = buildFailureCommentBody(detail, { chatsUrl, marker });
 		expect(body).toContain("chat-error-kind=user_ambiguous");
-		expect(body).toContain("coder-username");
+		expect(body).toContain("acting-coder-username");
 		expect(body.endsWith(marker)).toBe(true);
 	});
 

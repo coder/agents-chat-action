@@ -88,7 +88,7 @@ export class ActionFailureError extends Error {
 	// undefined (e.g. transport failure on the first getChat).
 	readonly chatId?: ChatId;
 
-	// coder-username output. Decorated by run() once the user resolves.
+	// acting-coder-username output. Decorated by run() once the user resolves.
 	coderUsername?: string;
 
 	// chat-url output. Decorated by run() once the chat URL is built.
@@ -202,14 +202,14 @@ type TrustClassification =
 
 /**
  * Identity-resolution source labels the divergence check reads to decide
- * whether to warn. `coder-username` and `github-user-id` are explicit
+ * whether to warn. `acting-coder-username` and `acting-github-user-id` are explicit
  * workflow inputs; `sender` and `actor` are auto-resolved from
  * `github.context`; `token` is the `users/me` fallback (same user as the
  * token holder, so divergence is impossible by construction).
  */
 type IdentitySource =
-	| "coder-username"
-	| "github-user-id"
+	| "acting-coder-username"
+	| "acting-github-user-id"
 	| "sender"
 	| "actor"
 	| "token";
@@ -599,8 +599,8 @@ export class CoderAgentChatAction {
 	 * Resolve the Coder username the action runs as for org-pick and the
 	 * per-user reuse label. Resolution order, high to low:
 	 *
-	 * 1. `coder-username` input.
-	 * 2. `github-user-id` input.
+	 * 1. `acting-coder-username` input.
+	 * 2. `acting-github-user-id` input.
 	 * 3. `context.payload.sender.id` (issue, pull request, comment, and most
 	 *    webhook-driven events that carry the triggering user under `sender`).
 	 * 4. `context.actor` for events whose payload lacks a usable `sender.id`
@@ -653,7 +653,7 @@ export class CoderAgentChatAction {
 					throw new ActionFailureError(
 						"user_not_found",
 						`Coder user '${this.inputs.coderUsername}' not found. ` +
-							"Check the `coder-username` input value.",
+							"Check the `acting-coder-username` input value.",
 						undefined,
 						{ cause: err },
 					);
@@ -663,7 +663,7 @@ export class CoderAgentChatAction {
 			return {
 				username: coderUser.username,
 				user: coderUser,
-				source: "coder-username",
+				source: "acting-coder-username",
 			};
 		}
 		if (this.inputs.githubUserID !== undefined) {
@@ -676,7 +676,7 @@ export class CoderAgentChatAction {
 			return {
 				username: coderUser.username,
 				user: coderUser,
-				source: "github-user-id",
+				source: "acting-github-user-id",
 			};
 		}
 
@@ -693,8 +693,8 @@ export class CoderAgentChatAction {
 			// used for org-pick and the per-user reuse label
 			// (`coder-agents-chat-action-user`) from pollution by untrusted
 			// triggers. The chat owner is the `coder-token` holder regardless
-			// of the gate's verdict. Explicit `coder-username` and
-			// `github-user-id` inputs are handled above and bypass this gate by
+			// of the gate's verdict. Explicit `acting-coder-username` and
+			// `acting-github-user-id` inputs are handled above and bypass this gate by
 			// design; on refusal the action does NOT fall through to `users/me`
 			// because a hostile-trigger event should not silently collapse onto
 			// the token owner.
@@ -703,8 +703,8 @@ export class CoderAgentChatAction {
 				throw new Error(
 					"Refusing to auto-resolve a GitHub identity: " +
 						`${trust.reason}. ` +
-						"Set the `coder-username` input to a Coder username, or set " +
-						"`github-user-id` to the GitHub numeric user id of the user " +
+						"Set the `acting-coder-username` input to a Coder username, or set " +
+						"`acting-github-user-id` to the GitHub numeric user id of the user " +
 						"the chat should run as.",
 				);
 			}
@@ -714,7 +714,7 @@ export class CoderAgentChatAction {
 
 			// Prefer `sender.id` over `actor`: it's already numeric, no extra
 			// API call. The guard mirrors `z.number().int().positive()` on the
-			// `github-user-id` input.
+			// `acting-github-user-id` input.
 			const senderId = this.context.payload?.sender?.id;
 			if (
 				typeof senderId === "number" &&
@@ -734,7 +734,7 @@ export class CoderAgentChatAction {
 				} catch (err) {
 					throw new Error(
 						`Failed to resolve Coder user from github.context.payload.sender.id (${senderId}): ${describeError(err)}. ` +
-							"Set the `coder-username` input to bypass auto-resolution.",
+							"Set the `acting-coder-username` input to bypass auto-resolution.",
 					);
 				}
 			}
@@ -757,7 +757,7 @@ export class CoderAgentChatAction {
 				} catch (err) {
 					throw new Error(
 						`Failed to resolve GitHub user id for github.context.actor (${actor}): ${describeError(err)}. ` +
-							"Set the `coder-username` input to bypass auto-resolution.",
+							"Set the `acting-coder-username` input to bypass auto-resolution.",
 					);
 				}
 				try {
@@ -770,7 +770,7 @@ export class CoderAgentChatAction {
 				} catch (err) {
 					throw new Error(
 						`Failed to resolve Coder user for github.context.actor (${actor}, GitHub user id ${actorId}): ${describeError(err)}. ` +
-							"Set the `coder-username` input to bypass auto-resolution.",
+							"Set the `acting-coder-username` input to bypass auto-resolution.",
 					);
 				}
 			}
@@ -790,8 +790,8 @@ export class CoderAgentChatAction {
 		} catch (err) {
 			throw new Error(
 				`Failed to resolve the \`coder-token\` owner via GET /api/v2/users/me: ${describeError(err)}. ` +
-					"Set the `coder-username` input to a Coder username, or set " +
-					"`github-user-id` to the GitHub numeric user id of the user the " +
+					"Set the `acting-coder-username` input to a Coder username, or set " +
+					"`acting-github-user-id` to the GitHub numeric user id of the user the " +
 					"chat should run as.",
 			);
 		}
@@ -836,8 +836,8 @@ export class CoderAgentChatAction {
 		source: IdentitySource;
 	}): Promise<void> {
 		if (
-			resolved.source !== "coder-username" &&
-			resolved.source !== "github-user-id"
+			resolved.source !== "acting-coder-username" &&
+			resolved.source !== "acting-github-user-id"
 		) {
 			return;
 		}
@@ -874,13 +874,13 @@ export class CoderAgentChatAction {
 	 *    is non-deterministic; a `core.warning` is emitted in that case.
 	 * 2. The resolved Coder user's `organization_ids[0]`. When identity was
 	 *    resolved via the GitHub-id path the user object is reused; the
-	 *    `coder-username` path looks the user up here via
+	 *    `acting-coder-username` path looks the user up here via
 	 *    `getCoderUserByUsername`.
 	 *
 	 * Throws `ActionFailureError("org_not_found")` when `coder-organization`
 	 * names an org that does not exist (HTTP 404) or the resolved user has no
 	 * org memberships. Throws `ActionFailureError("user_not_found")` when only
-	 * `coder-username` is set and the user is missing (HTTP 404). Other API
+	 * `acting-coder-username` is set and the user is missing (HTTP 404). Other API
 	 * errors propagate as `CoderAPIError`. The original error is attached via
 	 * `options.cause` on every wrap; `run()`'s `handleFailure` re-classifies
 	 * the failure into the failure-path comment.
@@ -915,7 +915,7 @@ export class CoderAgentChatAction {
 		}
 
 		// Default to the user's first org membership. Fetch the user lazily
-		// when only `coder-username` was provided; wrap a 404 into
+		// when only `acting-coder-username` was provided; wrap a 404 into
 		// `user_not_found` symmetrically with the named-org 404 above.
 		let user: CoderSDKUser;
 		if (resolvedUser) {
@@ -928,7 +928,7 @@ export class CoderAgentChatAction {
 					throw new ActionFailureError(
 						"user_not_found",
 						`Coder user '${coderUsername}' not found. ` +
-							"Check the `coder-username` input value.",
+							"Check the `acting-coder-username` input value.",
 						undefined,
 						{ cause: err },
 					);
