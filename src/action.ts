@@ -201,6 +201,20 @@ type TrustClassification =
 	| { kind: "no-signal" };
 
 /**
+ * Identity-resolution source labels the divergence check reads to decide
+ * whether to warn. `coder-username` and `github-user-id` are explicit
+ * workflow inputs; `sender` and `actor` are auto-resolved from
+ * `github.context`; `token` is the `users/me` fallback (same user as the
+ * token holder, so divergence is impossible by construction).
+ */
+type IdentitySource =
+	| "coder-username"
+	| "github-user-id"
+	| "sender"
+	| "actor"
+	| "token";
+
+/**
  * Classify whether the triggering identity from `context` is trusted for
  * auto-resolve.
  *
@@ -322,7 +336,7 @@ export class CoderAgentChatAction {
 	 * Generate chat URL.
 	 */
 	generateChatUrl(chatId: ChatId): string {
-		return `${normalizeBaseUrl(this.inputs.coderURL)}/chats/${chatId}`;
+		return `${normalizeBaseUrl(this.inputs.coderURL)}/agents/${chatId}`;
 	}
 
 	// Post or update the success comment on the linked issue or pull
@@ -582,7 +596,8 @@ export class CoderAgentChatAction {
 	}
 
 	/**
-	 * Resolve the Coder username to run as. Resolution order, high to low:
+	 * Resolve the Coder username the action runs as for org-pick and the
+	 * per-user reuse label. Resolution order, high to low:
 	 *
 	 * 1. `coder-username` input.
 	 * 2. `github-user-id` input.
@@ -592,40 +607,39 @@ export class CoderAgentChatAction {
 	 *    (partial sender objects, bot dispatches, custom dispatch chains).
 	 *    Resolved to a numeric id via `octokit.rest.users.getByUsername`,
 	 *    then to a Coder user.
+	 * 5. `GET /api/v2/users/me` against the configured `coder-token`. The
+	 *    chat owner on `POST /api/experimental/chats` is always the token
+	 *    holder; for events with no usable github.context signal (schedule,
+	 *    a workflow_dispatch with no sender or actor), the token owner is
+	 *    the only identity we can attribute the run to.
 	 *
-	 * `schedule` events are refused before any auto-resolve source: their
-	 * `actor` is the workflow file's last editor, not a triggering identity.
+	 * Sources 3 and 4 are gated by `classifyAutoResolveTrust`. Fork pull
+	 * requests and triggering identities whose `comment.author_association`
+	 * or `review.author_association` lacks repository write access cause the
+	 * gate to refuse: the action throws and does NOT fall through to
+	 * `users/me`, because a hostile-trigger event should not silently
+	 * collapse onto the token owner. The gate protects the acting user used
+	 * for org-pick and the per-user reuse label (`coder-agents-chat-action-user`),
+	 * not the chat owner (which is fixed by the token).
 	 *
-	 * Throws naming both inputs when no source resolves. Intermediate
-	 * failures are wrapped to name the auto-resolved source, preserve the
-	 * upstream error, and recommend `coder-username` as the bypass.
+	 * `schedule` events skip sources 3 and 4 directly: their `actor` is the
+	 * workflow file's last editor and their payload carries no triggering
+	 * identity. They proceed to `users/me`.
 	 *
-	 * Before sources 3 and 4, a trust gate (`classifyAutoResolveTrust`)
-	 * refuses auto-resolve for fork pull requests and for triggering
-	 * identities whose `comment.author_association` or
-	 * `review.author_association` lacks repository write access (anything
-	 * other than `OWNER`, `MEMBER`, `COLLABORATOR`). This prevents a
-	 * hostile-trigger attack where an attacker who happens to have a
-	 * Coder identity could open a fork PR or drop a comment to bind
-	 * their Coder identity to the workflow and execute
-	 * attacker-controlled prompts under the workflow's Coder session
-	 * token. Setting `coder-username` or `github-user-id` bypasses the
-	 * trust gate: the workflow author has explicitly chosen the identity.
-	 *
-	 * Returns `{ username, user? }`. `user` is set when the identity path
-	 * fetched a `CoderSDKUser` (sources 2-4); the explicit `coder-username`
-	 * path (source 1) always now also fetches the user via
-	 * `getCoderUserByUsername` so `user.id` is available for the
-	 * idempotency-by-label per-user scope.
+	 * Returns `{ username, user, source }`. `source` lets the caller decide
+	 * whether to run the token-owner vs acting-user divergence check.
 	 * `resolveOrganizationID` reuses `user` to read `organization_ids`
 	 * without a redundant lookup.
 	 */
 	async resolveCoderUsername(): Promise<{
 		username: string;
 		user: CoderSDKUser;
+		source: IdentitySource;
 	}> {
 		if (this.inputs.coderUsername) {
-			core.info(`Using provided Coder username: ${this.inputs.coderUsername}`);
+			core.info(
+				`Using provided Coder username for acting user: ${this.inputs.coderUsername}`,
+			);
 			// Fetch the full user so `user.id` is available downstream for
 			// the `coder-agents-chat-action-user` per-user reuse scope.
 			let coderUser: CoderSDKUser;
@@ -646,7 +660,11 @@ export class CoderAgentChatAction {
 				}
 				throw err;
 			}
-			return { username: coderUser.username, user: coderUser };
+			return {
+				username: coderUser.username,
+				user: coderUser,
+				source: "coder-username",
+			};
 		}
 		if (this.inputs.githubUserID !== undefined) {
 			core.info(
@@ -655,106 +673,195 @@ export class CoderAgentChatAction {
 			const coderUser = await this.coder.getCoderUserByGitHubId(
 				this.inputs.githubUserID,
 			);
-			return { username: coderUser.username, user: coderUser };
+			return {
+				username: coderUser.username,
+				user: coderUser,
+				source: "github-user-id",
+			};
 		}
 
-		// Refuse before any auto-resolve source so the exclusion is semantic,
-		// not an artifact of source ordering. Today's `schedule` payloads
-		// omit `sender`, but a future shape that delivered it would still
-		// describe the underlying webhook trigger, not the cron run.
-		if (this.context.eventName === "schedule") {
+		// `schedule` skips the sender/actor branches: the actor on a cron run
+		// is the workflow file's last editor, and the payload carries no
+		// triggering identity. The trust gate would return `no-signal` and
+		// the action proceeds to `users/me` below.
+		const isSchedule = this.context.eventName === "schedule";
+
+		if (!isSchedule) {
+			// Trust gate: before auto-resolving from `sender.id` or `actor`,
+			// refuse if the triggering identity comes from a fork PR or carries
+			// a low-trust `author_association`. This protects the acting user
+			// used for org-pick and the per-user reuse label
+			// (`coder-agents-chat-action-user`) from pollution by untrusted
+			// triggers. The chat owner is the `coder-token` holder regardless
+			// of the gate's verdict. Explicit `coder-username` and
+			// `github-user-id` inputs are handled above and bypass this gate by
+			// design; on refusal the action does NOT fall through to `users/me`
+			// because a hostile-trigger event should not silently collapse onto
+			// the token owner.
+			const trust = classifyAutoResolveTrust(this.context);
+			if (trust.kind === "untrusted") {
+				throw new Error(
+					"Refusing to auto-resolve a GitHub identity: " +
+						`${trust.reason}. ` +
+						"Set the `coder-username` input to a Coder username, or set " +
+						"`github-user-id` to the GitHub numeric user id of the user " +
+						"the chat should run as.",
+				);
+			}
+			if (trust.kind === "trusted") {
+				core.info(`Auto-resolve trust check passed: ${trust.reason}`);
+			}
+
+			// Prefer `sender.id` over `actor`: it's already numeric, no extra
+			// API call. The guard mirrors `z.number().int().positive()` on the
+			// `github-user-id` input.
+			const senderId = this.context.payload?.sender?.id;
+			if (
+				typeof senderId === "number" &&
+				Number.isInteger(senderId) &&
+				senderId > 0
+			) {
+				core.info(
+					`Auto-resolving Coder user from github.context.payload.sender.id: ${senderId}`,
+				);
+				try {
+					const coderUser = await this.coder.getCoderUserByGitHubId(senderId);
+					return {
+						username: coderUser.username,
+						user: coderUser,
+						source: "sender",
+					};
+				} catch (err) {
+					throw new Error(
+						`Failed to resolve Coder user from github.context.payload.sender.id (${senderId}): ${describeError(err)}. ` +
+							"Set the `coder-username` input to bypass auto-resolution.",
+					);
+				}
+			}
+
+			// Actor fallback for events whose payload lacks a usable `sender.id`.
+			// `workflow_dispatch` payloads do include `sender.id`, so source 3
+			// handles it; this branch covers partial sender objects, bot
+			// dispatches, and custom dispatch chains.
+			const actor = this.context.actor;
+			if (actor) {
+				core.info(
+					`Auto-resolving Coder user from github.context.actor: ${actor}`,
+				);
+				let actorId: number;
+				try {
+					const { data } = await this.octokit.rest.users.getByUsername({
+						username: actor,
+					});
+					actorId = data.id;
+				} catch (err) {
+					throw new Error(
+						`Failed to resolve GitHub user id for github.context.actor (${actor}): ${describeError(err)}. ` +
+							"Set the `coder-username` input to bypass auto-resolution.",
+					);
+				}
+				try {
+					const coderUser = await this.coder.getCoderUserByGitHubId(actorId);
+					return {
+						username: coderUser.username,
+						user: coderUser,
+						source: "actor",
+					};
+				} catch (err) {
+					throw new Error(
+						`Failed to resolve Coder user for github.context.actor (${actor}, GitHub user id ${actorId}): ${describeError(err)}. ` +
+							"Set the `coder-username` input to bypass auto-resolution.",
+					);
+				}
+			}
+		}
+
+		// Final fallback: derive the acting user from the `coder-token` via
+		// `GET /api/v2/users/me`. The chat already runs as this user; using
+		// the same identity for org-pick and the per-user reuse label keeps
+		// runs without explicit inputs (and `schedule` runs) attributable.
+		core.info(
+			"No GitHub identity input or workflow-context signal was usable; " +
+				"falling back to the `coder-token` owner via GET /api/v2/users/me.",
+		);
+		let tokenOwner: CoderSDKUser;
+		try {
+			tokenOwner = await this.getTokenOwner();
+		} catch (err) {
 			throw new Error(
-				"Cannot auto-resolve a GitHub identity for `schedule` events: " +
-					"`github.context.actor` for cron-triggered runs is the workflow " +
-					"file's last editor, not the triggering user. " +
+				`Failed to resolve the \`coder-token\` owner via GET /api/v2/users/me: ${describeError(err)}. ` +
 					"Set the `coder-username` input to a Coder username, or set " +
 					"`github-user-id` to the GitHub numeric user id of the user the " +
 					"chat should run as.",
 			);
 		}
+		return {
+			username: tokenOwner.username,
+			user: tokenOwner,
+			source: "token",
+		};
+	}
 
-		// Trust gate: before auto-resolving from `sender.id` or `actor`,
-		// refuse if the triggering identity comes from a fork PR or carries a
-		// low-trust `author_association`. Without this gate, an attacker who
-		// happens to have a Coder identity could open a fork PR or drop an
-		// issue comment to bind their Coder identity to the workflow and
-		// execute attacker-controlled prompts under the workflow's Coder
-		// token. Explicit `coder-username` and `github-user-id` inputs are
-		// handled above and bypass this gate by design.
-		const trust = classifyAutoResolveTrust(this.context);
-		if (trust.kind === "untrusted") {
-			throw new Error(
-				"Refusing to auto-resolve a GitHub identity: " +
-					`${trust.reason}. ` +
-					"Set the `coder-username` input to a Coder username, or set " +
-					"`github-user-id` to the GitHub numeric user id of the user " +
-					"the chat should run as.",
-			);
+	/**
+	 * Lazily fetch and memoize the `coder-token` owner. Used both as the
+	 * lowest-priority identity-resolution fallback and as the source of
+	 * truth for the token-owner vs acting-user divergence warning.
+	 */
+	private tokenOwnerCache: CoderSDKUser | undefined;
+	private async getTokenOwner(): Promise<CoderSDKUser> {
+		if (this.tokenOwnerCache) {
+			return this.tokenOwnerCache;
 		}
-		if (trust.kind === "trusted") {
-			core.info(`Auto-resolve trust check passed: ${trust.reason}`);
-		}
+		const user = await this.coder.getAuthenticatedUser();
+		this.tokenOwnerCache = user;
+		return user;
+	}
 
-		// Prefer `sender.id` over `actor`: it's already numeric, no extra
-		// API call. The guard mirrors `z.number().int().positive()` on the
-		// `github-user-id` input.
-		const senderId = this.context.payload?.sender?.id;
+	/**
+	 * When an explicit identity input was provided, compare the resolved
+	 * acting user to the `coder-token` owner and warn on divergence. The
+	 * chat is owned by the token holder regardless of the resolved acting
+	 * user; if they differ, the trust gate, the per-user reuse label, and
+	 * the org pick are all protecting an identity that is not the chat
+	 * owner. The workflow author should know.
+	 *
+	 * Suppressed for sources `sender`, `actor`, and `token` itself: those
+	 * paths either derive the user from event context (the divergence is
+	 * informational, not a workflow-author error) or already match the
+	 * token by definition.
+	 */
+	private async warnOnTokenOwnerDivergence(resolved: {
+		username: string;
+		user: CoderSDKUser;
+		source: IdentitySource;
+	}): Promise<void> {
 		if (
-			typeof senderId === "number" &&
-			Number.isInteger(senderId) &&
-			senderId > 0
+			resolved.source !== "coder-username" &&
+			resolved.source !== "github-user-id"
 		) {
-			core.info(
-				`Auto-resolving Coder user from github.context.payload.sender.id: ${senderId}`,
-			);
-			try {
-				const coderUser = await this.coder.getCoderUserByGitHubId(senderId);
-				return { username: coderUser.username, user: coderUser };
-			} catch (err) {
-				throw new Error(
-					`Failed to resolve Coder user from github.context.payload.sender.id (${senderId}): ${describeError(err)}. ` +
-						"Set the `coder-username` input to bypass auto-resolution.",
-				);
-			}
+			return;
 		}
-
-		// Actor fallback for events whose payload lacks a usable `sender.id`.
-		// `workflow_dispatch` payloads do include `sender.id`, so source 3
-		// handles it; this branch covers partial sender objects, bot
-		// dispatches, and custom dispatch chains.
-		const actor = this.context.actor;
-		if (actor) {
-			core.info(
-				`Auto-resolving Coder user from github.context.actor: ${actor}`,
+		let tokenOwner: CoderSDKUser;
+		try {
+			tokenOwner = await this.getTokenOwner();
+		} catch (err) {
+			// The divergence check is best-effort. A `users/me` failure here
+			// would also break createChat (same token), so let the action
+			// keep going and surface that failure at the createChat call site.
+			core.warning(
+				`Could not fetch the \`coder-token\` owner for the token-owner divergence check: ${describeError(err)}. ` +
+					"Continuing; the chat will still be owned by whoever the token belongs to.",
 			);
-			let actorId: number;
-			try {
-				const { data } = await this.octokit.rest.users.getByUsername({
-					username: actor,
-				});
-				actorId = data.id;
-			} catch (err) {
-				throw new Error(
-					`Failed to resolve GitHub user id for github.context.actor (${actor}): ${describeError(err)}. ` +
-						"Set the `coder-username` input to bypass auto-resolution.",
-				);
-			}
-			try {
-				const coderUser = await this.coder.getCoderUserByGitHubId(actorId);
-				return { username: coderUser.username, user: coderUser };
-			} catch (err) {
-				throw new Error(
-					`Failed to resolve Coder user for github.context.actor (${actor}, GitHub user id ${actorId}): ${describeError(err)}. ` +
-						"Set the `coder-username` input to bypass auto-resolution.",
-				);
-			}
+			return;
 		}
-
-		throw new Error(
-			"Could not auto-resolve a GitHub identity from the workflow context. " +
-				"Set the `coder-username` input to a Coder username, or set " +
-				"`github-user-id` to the GitHub numeric user id of the user the " +
-				"chat should run as.",
+		if (tokenOwner.id === resolved.user.id) {
+			return;
+		}
+		core.warning(
+			`The resolved acting user '${resolved.username}' differs from the \`coder-token\` owner '${tokenOwner.username}'. ` +
+				"The chat is owned by the token holder; the acting user only " +
+				"selects the organization and the per-user reuse label. Confirm " +
+				"the token belongs to the user you intended.",
 		);
 	}
 
@@ -939,8 +1046,19 @@ export class CoderAgentChatAction {
 	private async runInner(): Promise<ActionOutputs> {
 		this.warnUnwiredInputs();
 
-		const { username: coderUsername, user: resolvedUser } =
-			await this.resolveCoderUsername();
+		const {
+			username: coderUsername,
+			user: resolvedUser,
+			source: identitySource,
+		} = await this.resolveCoderUsername();
+		core.info(
+			`Resolved acting Coder user: '${coderUsername}' (source: ${identitySource})`,
+		);
+		await this.warnOnTokenOwnerDivergence({
+			username: coderUsername,
+			user: resolvedUser,
+			source: identitySource,
+		});
 
 		const { githubOrg, githubRepo, githubIssueNumber } = this.parseGithubURL();
 		core.info(`GitHub owner: ${githubOrg}`);

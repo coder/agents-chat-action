@@ -219,7 +219,7 @@ describe("classifyError", () => {
 
 describe("buildFailureCommentBody", () => {
 	const marker = "<!-- coder-agents-chat-action:owner/repo#123 -->";
-	const chatsUrl = "https://coder.test/chats";
+	const chatsUrl = "https://coder.test/agents";
 
 	test("spend_exceeded body includes kind, dollar amounts, deployment chat URL, and marker", () => {
 		const detail: FailureDetail = {
@@ -295,7 +295,7 @@ describe("buildFailureCommentBody", () => {
 					"after 600s waiting for a terminal status",
 			};
 			const chatUrl =
-				"https://coder.test/chats/990e8400-e29b-41d4-a716-446655440000";
+				"https://coder.test/agents/990e8400-e29b-41d4-a716-446655440000";
 			const body = buildFailureCommentBody(detail, {
 				chatsUrl,
 				chatUrl,
@@ -325,7 +325,7 @@ describe("buildFailureCommentBody", () => {
 					"connection reset by peer",
 			};
 			const chatUrl =
-				"https://coder.test/chats/990e8400-e29b-41d4-a716-446655440000";
+				"https://coder.test/agents/990e8400-e29b-41d4-a716-446655440000";
 			const body = buildFailureCommentBody(detail, {
 				chatsUrl,
 				chatUrl,
@@ -353,7 +353,7 @@ describe("buildFailureCommentBody", () => {
 				message: "Anthropic 429 rate limit",
 			};
 			const chatUrl =
-				"https://coder.test/chats/990e8400-e29b-41d4-a716-446655440000";
+				"https://coder.test/agents/990e8400-e29b-41d4-a716-446655440000";
 			const body = buildFailureCommentBody(detail, {
 				chatsUrl,
 				chatUrl,
@@ -409,18 +409,18 @@ describe("normalizeBaseUrl", () => {
 });
 
 describe("buildDeploymentChatsUrl", () => {
-	test("appends /chats to a clean base URL", () => {
+	test("appends /agents to a clean base URL", () => {
 		expect(buildDeploymentChatsUrl("https://coder.test")).toBe(
-			"https://coder.test/chats",
+			"https://coder.test/agents",
 		);
 	});
 
 	test("normalizes trailing slash, query, and fragment before appending", () => {
 		expect(buildDeploymentChatsUrl("https://coder.test/?x=1")).toBe(
-			"https://coder.test/chats",
+			"https://coder.test/agents",
 		);
 		expect(buildDeploymentChatsUrl("https://coder.test/#a")).toBe(
-			"https://coder.test/chats",
+			"https://coder.test/agents",
 		);
 	});
 });
@@ -511,7 +511,7 @@ describe("findCommentByPredicate", () => {
 describe("buildSuccessCommentBody", () => {
 	const marker = "<!-- coder-agents-chat-action:owner/repo#123 -->";
 	const chatUrl =
-		"https://coder.test/chats/990e8400-e29b-41d4-a716-446655440000";
+		"https://coder.test/agents/990e8400-e29b-41d4-a716-446655440000";
 
 	test(
 		"wait=complete + completed body shows chat URL, status, PR URL, and " +

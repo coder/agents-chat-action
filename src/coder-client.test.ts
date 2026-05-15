@@ -337,6 +337,44 @@ describe("CoderClient", () => {
 		});
 	});
 
+	describe("getAuthenticatedUser", () => {
+		test("returns the user behind the configured token", async () => {
+			mockFetch.mockResolvedValueOnce(createMockResponse(mockUser));
+
+			const result = await client.getAuthenticatedUser();
+
+			expect(result.id).toBe(mockUser.id);
+			expect(result.username).toBe(mockUser.username);
+			expect(mockFetch).toHaveBeenCalledWith(
+				"https://coder.test/api/v2/users/me",
+				expect.objectContaining({
+					headers: expect.objectContaining({
+						"Coder-Session-Token": "test-token",
+					}),
+				}),
+			);
+		});
+
+		test("propagates 401 as CoderAPIError", async () => {
+			mockFetch.mockResolvedValueOnce(
+				createMockResponse(
+					{ error: "Unauthorized" },
+					{ ok: false, status: 401, statusText: "Unauthorized" },
+				),
+			);
+
+			let caught: unknown;
+			try {
+				await client.getAuthenticatedUser();
+			} catch (e) {
+				caught = e;
+			}
+
+			expect(caught).toBeInstanceOf(CoderAPIError);
+			expect((caught as CoderAPIError).statusCode).toBe(401);
+		});
+	});
+
 	describe("getOrganizationByName", () => {
 		test("returns the organization when found", async () => {
 			mockFetch.mockResolvedValueOnce(createMockResponse(mockOrganization));

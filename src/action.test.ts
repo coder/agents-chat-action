@@ -215,7 +215,7 @@ describe("CoderAgentChatAction", () => {
 
 			const result = action.generateChatUrl(mockChat.id);
 
-			expect(result).toBe(`https://coder.test/chats/${mockChat.id}`);
+			expect(result).toBe(`https://coder.test/agents/${mockChat.id}`);
 		});
 
 		test("handles URL with trailing junk", () => {
@@ -231,7 +231,7 @@ describe("CoderAgentChatAction", () => {
 
 			const result = action.generateChatUrl(mockChat.id);
 
-			expect(result).toBe(`https://coder.test/chats/${mockChat.id}`);
+			expect(result).toBe(`https://coder.test/agents/${mockChat.id}`);
 		});
 	});
 
@@ -381,7 +381,7 @@ describe("CoderAgentChatAction", () => {
 		expect(parsedResult.chatTitle).toBe("Test chat");
 		expect(parsedResult.workspaceId).toBe(mockChat.workspace_id ?? undefined);
 		expect(parsedResult.chatUrl).toMatch(
-			/^https:\/\/coder\.test\/chats\/[a-f0-9-]+$/,
+			/^https:\/\/coder\.test\/agents\/[a-f0-9-]+$/,
 		);
 	});
 
@@ -1108,10 +1108,18 @@ describe("CoderAgentChatAction", () => {
 			expect(result.coderUsername).toBe(mockUser.username);
 		});
 
-		test("refuses to auto-resolve schedule events even when actor is present", async () => {
+		test("falls back to users/me on schedule events; actor is the workflow editor and is skipped", async () => {
+			// The actor on a cron run is the workflow file's last editor, not
+			// the triggering user. Sender is empty. The action falls back to
+			// the `coder-token` owner so the chat owner and the acting user
+			// match (the chat is already owned by the token holder).
+			coderClient.mockGetAuthenticatedUser.mockResolvedValue(mockUser);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+
 			const inputs = createMockInputs({
 				githubUserID: undefined,
 				coderUsername: undefined,
+				commentOnIssue: false,
 			});
 			const context = createMockContext({
 				eventName: "schedule",
@@ -1125,29 +1133,30 @@ describe("CoderAgentChatAction", () => {
 				context,
 			);
 
-			let caught: unknown;
-			try {
-				await action.run();
-			} catch (e) {
-				caught = e;
-			}
-			expect(caught).toBeInstanceOf(Error);
-			const message = (caught as Error).message;
-			expect(message).toContain("schedule");
-			expect(message).toContain("coder-username");
-			expect(message).toContain("github-user-id");
+			const result = await action.run();
+
+			expect(result.coderUsername).toBe(mockUser.username);
+			expect(coderClient.mockGetAuthenticatedUser).toHaveBeenCalledTimes(1);
+			// The actor must not be consulted on schedule events. The
+			// GitHub-id fallback path is also unreachable when the actor is
+			// not even looked up, so no Coder-user-by-GitHub-id call either.
 			expect(octokit.rest.users.getByUsername).not.toHaveBeenCalled();
 			expect(coderClient.mockGetCoderUserByGithubID).not.toHaveBeenCalled();
 		});
 
-		test("refuses to auto-resolve schedule events even when sender.id is present", async () => {
+		test("falls back to users/me on schedule events even when sender.id is present", async () => {
 			// The schedule guard must be semantic, not positional. Today's
 			// `schedule` payloads omit `sender`, but if a future GHES extension
-			// or custom dispatch chain delivers `sender.id`, we still refuse
-			// rather than silently misattribute.
+			// or custom dispatch chain delivers `sender.id`, it still describes
+			// the underlying webhook trigger, not the cron run. Skip sender,
+			// fall back to the token owner.
+			coderClient.mockGetAuthenticatedUser.mockResolvedValue(mockUser);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+
 			const inputs = createMockInputs({
 				githubUserID: undefined,
 				coderUsername: undefined,
+				commentOnIssue: false,
 			});
 			const context = createMockContext({
 				eventName: "schedule",
@@ -1161,22 +1170,55 @@ describe("CoderAgentChatAction", () => {
 				context,
 			);
 
-			let caught: unknown;
-			try {
-				await action.run();
-			} catch (e) {
-				caught = e;
-			}
-			expect(caught).toBeInstanceOf(Error);
-			const message = (caught as Error).message;
-			expect(message).toContain("schedule");
-			expect(message).toContain("coder-username");
-			expect(message).toContain("github-user-id");
+			const result = await action.run();
+
+			expect(result.coderUsername).toBe(mockUser.username);
+			expect(coderClient.mockGetAuthenticatedUser).toHaveBeenCalledTimes(1);
 			expect(coderClient.mockGetCoderUserByGithubID).not.toHaveBeenCalled();
 			expect(octokit.rest.users.getByUsername).not.toHaveBeenCalled();
 		});
 
-		test("fails with a clear error when no source resolves", async () => {
+		test("falls back to users/me when neither sender.id nor actor are usable", async () => {
+			// `repository_dispatch` with no sender and no actor: no
+			// github.context signal at all. Trust gate returns `no-signal`.
+			// The action falls back to the token owner rather than failing.
+			coderClient.mockGetAuthenticatedUser.mockResolvedValue(mockUser);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+
+			const inputs = createMockInputs({
+				githubUserID: undefined,
+				coderUsername: undefined,
+				commentOnIssue: false,
+			});
+			const context = createMockContext({
+				eventName: "repository_dispatch",
+				actor: "",
+				payload: {},
+			});
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				context,
+			);
+
+			const result = await action.run();
+
+			expect(result.coderUsername).toBe(mockUser.username);
+			expect(coderClient.mockGetAuthenticatedUser).toHaveBeenCalledTimes(1);
+			expect(coderClient.mockGetCoderUserByGithubID).not.toHaveBeenCalled();
+			expect(octokit.rest.users.getByUsername).not.toHaveBeenCalled();
+		});
+
+		test("surfaces a clear error when users/me also fails", async () => {
+			// No inputs, no github.context signal, and the token-owner lookup
+			// itself fails (bad token, deployment unreachable). The action
+			// must surface a clear message naming `users/me`, the underlying
+			// failure, and the two input bypasses.
+			coderClient.mockGetAuthenticatedUser.mockRejectedValue(
+				new Error("401 Unauthorized"),
+			);
+
 			const inputs = createMockInputs({
 				githubUserID: undefined,
 				coderUsername: undefined,
@@ -1201,10 +1243,50 @@ describe("CoderAgentChatAction", () => {
 			}
 			expect(caught).toBeInstanceOf(Error);
 			const message = (caught as Error).message;
+			expect(message).toContain("users/me");
+			expect(message).toContain("401 Unauthorized");
 			expect(message).toContain("coder-username");
 			expect(message).toContain("github-user-id");
-			expect(coderClient.mockGetCoderUserByGithubID).not.toHaveBeenCalled();
-			expect(octokit.rest.users.getByUsername).not.toHaveBeenCalled();
+		});
+
+		test("does not fall back to users/me when the trust gate refuses", async () => {
+			// Fork PR: the gate refuses to auto-resolve. Falling through to
+			// the token owner would silently collapse a hostile-trigger event
+			// onto the workflow's own identity, defeating the gate. The
+			// failure must look exactly like the gate's pre-fallback refusal.
+			const inputs = createMockInputs({
+				githubUserID: undefined,
+				coderUsername: undefined,
+			});
+			const context = createMockContext({
+				eventName: "pull_request",
+				actor: "attacker",
+				payload: {
+					sender: { id: 99999 },
+					pull_request: {
+						head: { repo: { fork: true, full_name: "attacker/fork" } },
+						base: { repo: { full_name: "owner/repo" } },
+					},
+				},
+			});
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				context,
+			);
+
+			let caught: unknown;
+			try {
+				await action.run();
+			} catch (e) {
+				caught = e;
+			}
+			expect(caught).toBeInstanceOf(Error);
+			const message = (caught as Error).message;
+			expect(message).toContain("fork");
+			expect(message).toContain("coder-username");
+			expect(coderClient.mockGetAuthenticatedUser).not.toHaveBeenCalled();
 		});
 
 		test("wraps sender lookup failure with source and bypass instructions", async () => {
@@ -1745,6 +1827,158 @@ describe("CoderAgentChatAction", () => {
 		});
 	});
 
+	describe("Token-owner divergence", () => {
+		test("warns when coder-username differs from the coder-token owner", async () => {
+			const actingUser = {
+				...mockUser,
+				id: "aa0e8400-e29b-41d4-a716-446655440099",
+				username: "acting-bot",
+			};
+			const tokenOwner = {
+				...mockUser,
+				id: "bb0e8400-e29b-41d4-a716-446655440099",
+				username: "token-owner",
+			};
+			coderClient.mockGetCoderUserByUsername.mockResolvedValue(actingUser);
+			coderClient.mockGetAuthenticatedUser.mockResolvedValue(tokenOwner);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+			const warningSpy = spyOn(core, "warning").mockImplementation(() => {});
+
+			try {
+				const inputs = createMockInputs({
+					githubUserID: undefined,
+					coderUsername: "acting-bot",
+					commentOnIssue: false,
+				});
+				const action = new CoderAgentChatAction(
+					coderClient,
+					octokit as unknown as Octokit,
+					inputs,
+					createMockContext({ eventName: "issues" }),
+				);
+
+				const result = await action.run();
+
+				expect(result.coderUsername).toBe("acting-bot");
+				expect(coderClient.mockGetAuthenticatedUser).toHaveBeenCalledTimes(1);
+				const divergenceCalls = warningSpy.mock.calls.filter((args) =>
+					String(args[0] ?? "").includes(
+						"differs from the `coder-token` owner",
+					),
+				);
+				expect(divergenceCalls.length).toBe(1);
+				const body = String(divergenceCalls[0][0]);
+				expect(body).toContain("acting-bot");
+				expect(body).toContain("token-owner");
+			} finally {
+				warningSpy.mockRestore();
+			}
+		});
+
+		test("warns when github-user-id resolves to a user different from the token owner", async () => {
+			const actingUser = {
+				...mockUser,
+				id: "aa0e8400-e29b-41d4-a716-44665544aaaa",
+				username: "github-acting",
+			};
+			const tokenOwner = {
+				...mockUser,
+				id: "bb0e8400-e29b-41d4-a716-44665544bbbb",
+				username: "token-owner",
+			};
+			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(actingUser);
+			coderClient.mockGetAuthenticatedUser.mockResolvedValue(tokenOwner);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+			const warningSpy = spyOn(core, "warning").mockImplementation(() => {});
+
+			try {
+				const inputs = createMockInputs({
+					githubUserID: 7777,
+					coderUsername: undefined,
+					commentOnIssue: false,
+				});
+				const action = new CoderAgentChatAction(
+					coderClient,
+					octokit as unknown as Octokit,
+					inputs,
+					createMockContext({ eventName: "issues" }),
+				);
+
+				await action.run();
+
+				const divergenceCalls = warningSpy.mock.calls.filter((args) =>
+					String(args[0] ?? "").includes(
+						"differs from the `coder-token` owner",
+					),
+				);
+				expect(divergenceCalls.length).toBe(1);
+			} finally {
+				warningSpy.mockRestore();
+			}
+		});
+
+		test("does not warn when coder-username matches the coder-token owner", async () => {
+			coderClient.mockGetCoderUserByUsername.mockResolvedValue(mockUser);
+			coderClient.mockGetAuthenticatedUser.mockResolvedValue(mockUser);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+			const warningSpy = spyOn(core, "warning").mockImplementation(() => {});
+
+			try {
+				const inputs = createMockInputs({
+					githubUserID: undefined,
+					coderUsername: mockUser.username,
+					commentOnIssue: false,
+				});
+				const action = new CoderAgentChatAction(
+					coderClient,
+					octokit as unknown as Octokit,
+					inputs,
+					createMockContext({ eventName: "issues" }),
+				);
+
+				await action.run();
+
+				const divergenceCalls = warningSpy.mock.calls.filter((args) =>
+					String(args[0] ?? "").includes(
+						"differs from the `coder-token` owner",
+					),
+				);
+				expect(divergenceCalls.length).toBe(0);
+			} finally {
+				warningSpy.mockRestore();
+			}
+		});
+
+		test("does not call users/me when auto-resolving from github.context (sender)", async () => {
+			// The divergence check is scoped to explicit identity inputs.
+			// Auto-resolved sources (sender, actor) cannot be cross-checked
+			// against the token without false alarms (the human triggerer is
+			// expected to differ from a service-account token).
+			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+
+			const inputs = createMockInputs({
+				githubUserID: undefined,
+				coderUsername: undefined,
+				commentOnIssue: false,
+			});
+			const context = createMockContext({
+				eventName: "issues",
+				payload: { sender: { id: 424242 } },
+			});
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+				context,
+			);
+
+			await action.run();
+
+			expect(coderClient.mockGetAuthenticatedUser).not.toHaveBeenCalled();
+		});
+	});
+
 	describe("wait=complete polling", () => {
 		test("wait=none honors the wait gate: no getChat, no clock sleep", async () => {
 			coderClient.mockGetCoderUserByGithubID.mockResolvedValue(mockUser);
@@ -2082,7 +2316,7 @@ describe("CoderAgentChatAction", () => {
 			expect(err.chat).toBeDefined();
 			expect(err.chat?.status).toBe("running");
 			expect(err.chatId).toBeDefined();
-			expect(err.chatUrl).toContain("/chats/");
+			expect(err.chatUrl).toContain("/agents/");
 			expect(err.coderUsername).toBe(mockUser.username);
 		});
 
@@ -2321,7 +2555,7 @@ describe("CoderAgentChatAction", () => {
 			expect(err.kind).toBe("api_error");
 			expect(err.chat).toBeUndefined();
 			expect(String(err.chatId)).toBe(existingChatId);
-			expect(err.chatUrl).toContain("/chats/");
+			expect(err.chatUrl).toContain("/agents/");
 			expect(err.coderUsername).toBe(mockUser.username);
 		});
 
@@ -2609,7 +2843,7 @@ describe("CoderAgentChatAction", () => {
 				expect(call?.body).toContain("chat-error-kind=spend_exceeded");
 				expect(call?.body).toContain("$7.50");
 				expect(call?.body).toContain("$10.00");
-				expect(call?.body).toContain("https://coder.test/chats");
+				expect(call?.body).toContain("https://coder.test/agents");
 				expect(call?.body).toContain(
 					"<!-- coder-agents-chat-action:test-org/test-repo#123 -->",
 				);

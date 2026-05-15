@@ -38,7 +38,7 @@ jobs:
           github-token: ${{ github.token }}
 ```
 
-The chat runs under the Coder user linked to the GitHub user who applied the label. Set `coder-username` for service-account workflows.
+The chat runs under the Coder user linked to the GitHub user who applied the label, while the chat itself is owned by the user the `coder-token` belongs to. Set `coder-username` to override the acting user (used for org pick and the per-user reuse label); see [Identity](#identity-resolution) and [Security](#security-model) for the full model.
 
 ## Inputs
 
@@ -49,8 +49,8 @@ The chat runs under the Coder user linked to the GitHub user who applied the lab
 | `chat-prompt`          | yes      |         | Prompt to send to the agent. |
 | `github-url`           | yes      |         | Issue or pull request URL. |
 | `github-token`         | yes      |         | Used to post and update comments. |
-| `coder-username`       | no       |         | Run the chat as this Coder user. Mutually exclusive with `github-user-id`. Bypasses the [trust gate](#security-model). |
-| `github-user-id`       | no       |         | Resolve to a Coder user by linked GitHub id. Mutually exclusive with `coder-username`. |
+| `coder-username`       | no       |         | Override the acting Coder user used for org pick and the per-user reuse label. Mutually exclusive with `github-user-id`. Bypasses the [trust gate](#security-model). Does NOT change the chat owner; the chat is always owned by the `coder-token` holder. |
+| `github-user-id`       | no       |         | Resolve the acting Coder user from a linked GitHub id. Mutually exclusive with `coder-username`. Does NOT change the chat owner. |
 | `coder-organization`   | no       |         | Coder organization name. Recommended for multi-org users. |
 | `workspace-id`         | no       |         | Pin the chat to an existing workspace. |
 | `model-config-id`      | no       |         | Model configuration to use. |
@@ -70,7 +70,7 @@ The chat runs under the Coder user linked to the GitHub user who applied the lab
 | `chat-created`        | `true` if newly created, `false` if a message was sent to an existing chat. |
 | `chat-status`         | `waiting`, `pending`, `running`, `paused`, `completed`, `error`. |
 | `chat-title`          | Chat title. |
-| `coder-username`      | Coder username the chat ran as. |
+| `coder-username`      | Acting Coder username (org pick, reuse label). The chat owner is the `coder-token` holder, which may differ. |
 | `workspace-id`        | Workspace UUID. |
 | `pull-request-url`    | PR or branch URL when the chat tracks changes. |
 | `pull-request-state`  | `open`, `closed`, `merged`. |
@@ -90,14 +90,15 @@ PR/diff outputs come from the chat's `diff_status` and are only reliable when th
 
 ### Identity resolution
 
-The action picks the Coder user to run the chat as. First source wins:
+The chat itself is always owned by the user the `coder-token` belongs to: `POST /api/experimental/chats` has no owner override, so the API binds ownership to the session. The action separately resolves an **acting user** used for org pick and the per-user reuse label (`coder-agents-chat-action-user`). First source wins:
 
 1. `coder-username` input. Used directly.
 2. `github-user-id` input. Looked up by linked GitHub id; deleted Coder users are filtered.
 3. `github.context.payload.sender.id`. Available on most webhook events.
-4. `github.context.actor`. Resolved to a GitHub id via Octokit. Excluded for `schedule` events (the actor is the workflow file editor, not a triggering user).
+4. `github.context.actor`. Resolved to a GitHub id via Octokit.
+5. `GET /api/v2/users/me` against the configured `coder-token`. Used when no input or workflow-context signal applies (`schedule` events, `workflow_dispatch` without sender or actor, custom `repository_dispatch` chains).
 
-If nothing resolves, the action fails and names the inputs to set.
+If the acting user resolves via `coder-username` or `github-user-id` and the result differs from the `coder-token` owner, the action emits a `core.warning` naming both usernames. The chat is still owned by the token holder; the warning surfaces the divergence so the workflow author can confirm the token belongs to the intended user.
 
 ### Organization resolution
 
@@ -171,7 +172,7 @@ jobs:
           wait: complete
 ```
 
-`pull_request_target` runs against the base repo and has access to secrets even for fork PRs. The service-account identity bypasses the trust gate so fork PRs are reviewed under a known bot.
+`pull_request_target` runs against the base repo and has access to secrets even for fork PRs. The service-account identity bypasses the trust gate so fork PRs are reviewed under the bot's organization and reuse scope. The chat itself is owned by the `coder-token` holder regardless.
 
 ### Send a follow-up
 
@@ -239,16 +240,18 @@ Branch on the kind without parsing the message:
 
 ## Security model
 
-Identity auto-resolve binds the Coder user matching the GitHub event sender to the chat. The trust gate refuses to auto-resolve when the trigger is untrusted:
+The **chat owner** is fixed by the `coder-token`: `POST /api/experimental/chats` has no owner override, so every chat the action creates is owned by the user the token belongs to. Workflows running fork PRs with `secrets.CODER_TOKEN` available (the `pull_request_target` pattern) execute under the workflow's Coder identity, end of story. The primary mitigation against attacker-controlled prompts under your token is GitHub's own rule that `secrets.*` is unavailable to `pull_request` events from forks. Use `pull_request_target` only when you've gated execution accordingly.
 
-- Fork PRs (`head.repo` null, `head.repo.fork === true`, or `head.repo.full_name !== base.repo.full_name`).
-- Comment or review events whose `comment.author_association` or `review.author_association` is not `OWNER`, `MEMBER`, or `COLLABORATOR`.
+The **acting user** is the Coder identity resolved for org pick and the per-user reuse label (`coder-agents-chat-action-user`). It is NOT the chat owner. The trust gate protects this acting user from pollution by untrusted triggers, layered on top of (not in place of) GitHub's event-permission model. The gate refuses to auto-resolve when:
 
-The gate doesn't read `issue.author_association` or `pull_request.author_association` because those describe the resource opener, not the event sender (a MEMBER labeling a NONE user's issue is fine).
+- The trigger is a fork pull request (`head.repo` null, `head.repo.fork === true`, or `head.repo.full_name !== base.repo.full_name`).
+- The trigger is a comment or review whose `comment.author_association` or `review.author_association` is not `OWNER`, `MEMBER`, or `COLLABORATOR`.
 
-For other events the action defers to GitHub's own event-permission model. Setting `coder-username` or `github-user-id` explicitly bypasses the gate; the workflow author has chosen the identity.
+Without the gate, an attacker who happens to have a linked Coder identity could open a fork PR or drop a drive-by comment and the action would attribute the chat (org pick, reuse label) to that identity. On refusal, the action does not fall back to `users/me`: a hostile trigger should not silently collapse onto the token owner. Setting `coder-username` or `github-user-id` bypasses the gate; the workflow author has chosen the identity explicitly.
 
-Independent of the gate: fork PRs that need secrets must run under `pull_request_target`, not `pull_request`.
+The gate does not read `issue.author_association` or `pull_request.author_association` because those describe the resource opener, not the event sender (a MEMBER labeling a NONE user's issue is fine).
+
+Independent of the gate: if your workflow uses `pull_request_target` to run against fork PRs, gate execution on author trust separately (label gating, manual approval). The trust gate covers the auto-resolved acting user only.
 
 ## Limitations
 

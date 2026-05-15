@@ -14,6 +14,16 @@ export interface CoderClient {
 
 	getCoderUserByUsername(username: string): Promise<CoderSDKUser>;
 
+	/**
+	 * Resolve the Coder user the configured `coder-token` belongs to via
+	 * `GET /api/v2/users/me`. The chat owner on `POST /api/experimental/chats`
+	 * is always the token holder (the API has no owner override), so this is
+	 * the identity the chat actually runs as. The action uses this as the
+	 * lowest-priority identity-resolution fallback and as the source of truth
+	 * for the token-owner vs acting-user divergence warning.
+	 */
+	getAuthenticatedUser(): Promise<CoderSDKUser>;
+
 	getOrganizationByName(name: string): Promise<CoderOrganization>;
 
 	createChat(params: CreateChatRequest): Promise<CoderChat>;
@@ -160,6 +170,14 @@ export class RealCoderClient implements CoderClient {
 			}
 			throw err;
 		}
+	}
+
+	async getAuthenticatedUser(): Promise<CoderSDKUser> {
+		// `users/me` resolves the session token to its owning user. No
+		// caching here; callers memoize when they need to reference the
+		// result more than once per run.
+		const response = await this.request<unknown>("/api/v2/users/me");
+		return CoderSDKUserSchema.parse(response);
 	}
 
 	async getOrganizationByName(name: string): Promise<CoderOrganization> {

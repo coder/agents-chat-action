@@ -168,6 +168,7 @@ export class MockCoderClient implements CoderClient {
 	public mockListChats = mock((_opts?: ListChatsOptions) =>
 		Promise.resolve([] as CoderChat[]),
 	);
+	public mockGetAuthenticatedUser = mock(() => Promise.resolve(mockUser));
 
 	async getCoderUserByGitHubId(githubUserId: number): Promise<CoderSDKUser> {
 		return this.mockGetCoderUserByGithubID(githubUserId);
@@ -175,6 +176,10 @@ export class MockCoderClient implements CoderClient {
 
 	async getCoderUserByUsername(username: string): Promise<CoderSDKUser> {
 		return this.mockGetCoderUserByUsername(username);
+	}
+
+	async getAuthenticatedUser(): Promise<CoderSDKUser> {
+		return this.mockGetAuthenticatedUser();
 	}
 
 	async getOrganizationByName(name: string): Promise<CoderOrganization> {

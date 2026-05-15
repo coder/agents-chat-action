@@ -28,11 +28,11 @@ inputs:
     required: true
 
   github-user-id:
-    description: "GitHub user ID to resolve to a Coder user. Mutually exclusive with coder-username."
+    description: "GitHub user ID. Resolves the acting Coder user (used for org pick and the per-user reuse label) by linked GitHub id. Does NOT change the chat owner; the chat is always owned by the `coder-token` holder. Mutually exclusive with coder-username."
     required: false
 
   coder-username:
-    description: "Coder username to use directly. Mutually exclusive with github-user-id; useful for service-account workflows."
+    description: "Override the acting Coder user used for org pick and the per-user reuse label. Mutually exclusive with github-user-id. Does NOT change the chat owner; the chat is always owned by the `coder-token` holder. Useful when the workflow's token belongs to one user but the action should attribute the run to another."
     required: false
 
   coder-organization:
@@ -77,7 +77,7 @@ inputs:
 
 outputs:
   coder-username:
-    description: "The Coder username resolved from the GitHub user."
+    description: "The acting Coder username (used for org pick and the per-user reuse label). The chat owner is the `coder-token` holder, which may differ."
 
   chat-id:
     description: "The chat ID."

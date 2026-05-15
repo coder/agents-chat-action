@@ -10,7 +10,7 @@ import { mockChat } from "./test-helpers";
 const baseOutputs: ActionOutputs = {
 	coderUsername: "u",
 	chatId: "990e8400-e29b-41d4-a716-446655440000",
-	chatUrl: "https://coder.test/chats/990e8400-e29b-41d4-a716-446655440000",
+	chatUrl: "https://coder.test/agents/990e8400-e29b-41d4-a716-446655440000",
 	chatCreated: true,
 };
 
@@ -270,14 +270,14 @@ describe("setFailureOutputs", () => {
 		const cap = captureSetOutput();
 		try {
 			const err = new ActionFailureError("timeout", "Timed out", mockChat);
-			err.chatUrl = "https://coder.test/chats/abc";
+			err.chatUrl = "https://coder.test/agents/abc";
 			err.coderUsername = "testuser";
 
 			setFailureOutputs(err);
 
 			expect(cap.calls).toContainEqual([
 				"chat-url",
-				"https://coder.test/chats/abc",
+				"https://coder.test/agents/abc",
 			]);
 			expect(cap.calls).toContainEqual(["coder-username", "testuser"]);
 		} finally {

@@ -546,5 +546,5 @@ export async function upsertCommentByMarker(args: {
 // Deployment-level chats URL for the "view chats" link in the failure body.
 // We use the deployment list because a creation failure has no chat ID.
 export function buildDeploymentChatsUrl(coderURL: string): string {
-	return `${normalizeBaseUrl(coderURL)}/chats`;
+	return `${normalizeBaseUrl(coderURL)}/agents`;
 }

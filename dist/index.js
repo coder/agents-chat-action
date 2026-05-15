@@ -26805,6 +26805,10 @@ class RealCoderClient {
       throw err;
     }
   }
+  async getAuthenticatedUser() {
+    const response = await this.request("/api/v2/users/me");
+    return CoderSDKUserSchema.parse(response);
+  }
   async getOrganizationByName(name) {
     if (!name) {
       throw new CoderAPIError("Organization name cannot be empty", 400);
@@ -27227,7 +27231,7 @@ async function upsertCommentByMarker(args) {
   });
 }
 function buildDeploymentChatsUrl(coderURL) {
-  return `${normalizeBaseUrl(coderURL)}/chats`;
+  return `${normalizeBaseUrl(coderURL)}/agents`;
 }
 
 // src/action.ts
@@ -27340,7 +27344,7 @@ class CoderAgentChatAction {
     };
   }
   generateChatUrl(chatId) {
-    return `${normalizeBaseUrl(this.inputs.coderURL)}/chats/${chatId}`;
+    return `${normalizeBaseUrl(this.inputs.coderURL)}/agents/${chatId}`;
   }
   async commentOnIssue(args) {
     const workflow = process.env.GITHUB_WORKFLOW || undefined;
@@ -27465,7 +27469,7 @@ class CoderAgentChatAction {
   }
   async resolveCoderUsername() {
     if (this.inputs.coderUsername) {
-      core2.info(`Using provided Coder username: ${this.inputs.coderUsername}`);
+      core2.info(`Using provided Coder username for acting user: ${this.inputs.coderUsername}`);
       let coderUser;
       try {
         coderUser = await this.coder.getCoderUserByUsername(this.inputs.coderUsername);
@@ -27475,53 +27479,105 @@ class CoderAgentChatAction {
         }
         throw err;
       }
-      return { username: coderUser.username, user: coderUser };
+      return {
+        username: coderUser.username,
+        user: coderUser,
+        source: "coder-username"
+      };
     }
     if (this.inputs.githubUserID !== undefined) {
       core2.info(`Looking up Coder user by GitHub user ID: ${this.inputs.githubUserID}`);
       const coderUser = await this.coder.getCoderUserByGitHubId(this.inputs.githubUserID);
-      return { username: coderUser.username, user: coderUser };
+      return {
+        username: coderUser.username,
+        user: coderUser,
+        source: "github-user-id"
+      };
     }
-    if (this.context.eventName === "schedule") {
-      throw new Error("Cannot auto-resolve a GitHub identity for `schedule` events: " + "`github.context.actor` for cron-triggered runs is the workflow " + "file's last editor, not the triggering user. " + "Set the `coder-username` input to a Coder username, or set " + "`github-user-id` to the GitHub numeric user id of the user the " + "chat should run as.");
-    }
-    const trust = classifyAutoResolveTrust(this.context);
-    if (trust.kind === "untrusted") {
-      throw new Error("Refusing to auto-resolve a GitHub identity: " + `${trust.reason}. ` + "Set the `coder-username` input to a Coder username, or set " + "`github-user-id` to the GitHub numeric user id of the user " + "the chat should run as.");
-    }
-    if (trust.kind === "trusted") {
-      core2.info(`Auto-resolve trust check passed: ${trust.reason}`);
-    }
-    const senderId = this.context.payload?.sender?.id;
-    if (typeof senderId === "number" && Number.isInteger(senderId) && senderId > 0) {
-      core2.info(`Auto-resolving Coder user from github.context.payload.sender.id: ${senderId}`);
-      try {
-        const coderUser = await this.coder.getCoderUserByGitHubId(senderId);
-        return { username: coderUser.username, user: coderUser };
-      } catch (err) {
-        throw new Error(`Failed to resolve Coder user from github.context.payload.sender.id (${senderId}): ${describeError(err)}. ` + "Set the `coder-username` input to bypass auto-resolution.");
+    const isSchedule = this.context.eventName === "schedule";
+    if (!isSchedule) {
+      const trust = classifyAutoResolveTrust(this.context);
+      if (trust.kind === "untrusted") {
+        throw new Error("Refusing to auto-resolve a GitHub identity: " + `${trust.reason}. ` + "Set the `coder-username` input to a Coder username, or set " + "`github-user-id` to the GitHub numeric user id of the user " + "the chat should run as.");
+      }
+      if (trust.kind === "trusted") {
+        core2.info(`Auto-resolve trust check passed: ${trust.reason}`);
+      }
+      const senderId = this.context.payload?.sender?.id;
+      if (typeof senderId === "number" && Number.isInteger(senderId) && senderId > 0) {
+        core2.info(`Auto-resolving Coder user from github.context.payload.sender.id: ${senderId}`);
+        try {
+          const coderUser = await this.coder.getCoderUserByGitHubId(senderId);
+          return {
+            username: coderUser.username,
+            user: coderUser,
+            source: "sender"
+          };
+        } catch (err) {
+          throw new Error(`Failed to resolve Coder user from github.context.payload.sender.id (${senderId}): ${describeError(err)}. ` + "Set the `coder-username` input to bypass auto-resolution.");
+        }
+      }
+      const actor = this.context.actor;
+      if (actor) {
+        core2.info(`Auto-resolving Coder user from github.context.actor: ${actor}`);
+        let actorId;
+        try {
+          const { data } = await this.octokit.rest.users.getByUsername({
+            username: actor
+          });
+          actorId = data.id;
+        } catch (err) {
+          throw new Error(`Failed to resolve GitHub user id for github.context.actor (${actor}): ${describeError(err)}. ` + "Set the `coder-username` input to bypass auto-resolution.");
+        }
+        try {
+          const coderUser = await this.coder.getCoderUserByGitHubId(actorId);
+          return {
+            username: coderUser.username,
+            user: coderUser,
+            source: "actor"
+          };
+        } catch (err) {
+          throw new Error(`Failed to resolve Coder user for github.context.actor (${actor}, GitHub user id ${actorId}): ${describeError(err)}. ` + "Set the `coder-username` input to bypass auto-resolution.");
+        }
       }
     }
-    const actor = this.context.actor;
-    if (actor) {
-      core2.info(`Auto-resolving Coder user from github.context.actor: ${actor}`);
-      let actorId;
-      try {
-        const { data } = await this.octokit.rest.users.getByUsername({
-          username: actor
-        });
-        actorId = data.id;
-      } catch (err) {
-        throw new Error(`Failed to resolve GitHub user id for github.context.actor (${actor}): ${describeError(err)}. ` + "Set the `coder-username` input to bypass auto-resolution.");
-      }
-      try {
-        const coderUser = await this.coder.getCoderUserByGitHubId(actorId);
-        return { username: coderUser.username, user: coderUser };
-      } catch (err) {
-        throw new Error(`Failed to resolve Coder user for github.context.actor (${actor}, GitHub user id ${actorId}): ${describeError(err)}. ` + "Set the `coder-username` input to bypass auto-resolution.");
-      }
+    core2.info("No GitHub identity input or workflow-context signal was usable; " + "falling back to the `coder-token` owner via GET /api/v2/users/me.");
+    let tokenOwner;
+    try {
+      tokenOwner = await this.getTokenOwner();
+    } catch (err) {
+      throw new Error(`Failed to resolve the \`coder-token\` owner via GET /api/v2/users/me: ${describeError(err)}. ` + "Set the `coder-username` input to a Coder username, or set " + "`github-user-id` to the GitHub numeric user id of the user the " + "chat should run as.");
     }
-    throw new Error("Could not auto-resolve a GitHub identity from the workflow context. " + "Set the `coder-username` input to a Coder username, or set " + "`github-user-id` to the GitHub numeric user id of the user the " + "chat should run as.");
+    return {
+      username: tokenOwner.username,
+      user: tokenOwner,
+      source: "token"
+    };
+  }
+  tokenOwnerCache;
+  async getTokenOwner() {
+    if (this.tokenOwnerCache) {
+      return this.tokenOwnerCache;
+    }
+    const user = await this.coder.getAuthenticatedUser();
+    this.tokenOwnerCache = user;
+    return user;
+  }
+  async warnOnTokenOwnerDivergence(resolved) {
+    if (resolved.source !== "coder-username" && resolved.source !== "github-user-id") {
+      return;
+    }
+    let tokenOwner;
+    try {
+      tokenOwner = await this.getTokenOwner();
+    } catch (err) {
+      core2.warning(`Could not fetch the \`coder-token\` owner for the token-owner divergence check: ${describeError(err)}. ` + "Continuing; the chat will still be owned by whoever the token belongs to.");
+      return;
+    }
+    if (tokenOwner.id === resolved.user.id) {
+      return;
+    }
+    core2.warning(`The resolved acting user '${resolved.username}' differs from the \`coder-token\` owner '${tokenOwner.username}'. ` + "The chat is owned by the token holder; the acting user only " + "selects the organization and the per-user reuse label. Confirm " + "the token belongs to the user you intended.");
   }
   async resolveOrganizationID(coderUsername, resolvedUser) {
     if (this.inputs.coderOrganization) {
@@ -27608,7 +27664,17 @@ class CoderAgentChatAction {
   }
   async runInner() {
     this.warnUnwiredInputs();
-    const { username: coderUsername, user: resolvedUser } = await this.resolveCoderUsername();
+    const {
+      username: coderUsername,
+      user: resolvedUser,
+      source: identitySource
+    } = await this.resolveCoderUsername();
+    core2.info(`Resolved acting Coder user: '${coderUsername}' (source: ${identitySource})`);
+    await this.warnOnTokenOwnerDivergence({
+      username: coderUsername,
+      user: resolvedUser,
+      source: identitySource
+    });
     const { githubOrg, githubRepo, githubIssueNumber } = this.parseGithubURL();
     core2.info(`GitHub owner: ${githubOrg}`);
     core2.info(`GitHub repo: ${githubRepo}`);
