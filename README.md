@@ -2,11 +2,12 @@
 
 GitHub Action that starts a [Coder Agents](https://coder.com/docs/ai-coder/agents) chat against a GitHub issue or pull request, optionally waits for it to finish, and posts the result as a comment. Re-running the workflow on the same target continues the existing chat instead of duplicating.
 
+The chat owner is always the user the `coder-token` belongs to. Read [Security model](#security-model) before adopting on a public repo.
+
 ## Requirements
 
 - Coder deployment with Agents enabled (experimental).
-- Coder session token with permission to read users in the target organization and to create chats.
-- For GitHub-id identity resolution: deployment configured with [GitHub OAuth](https://coder.com/docs/admin/external-auth#configure-a-github-oauth-app) and the Coder user has linked their GitHub account.
+- Coder session token belonging to the user the chats should run as. Treat this token as a high-value secret: anyone holding it acts as that Coder user via the agent's tool plane (see [Security model](#security-model)).
 
 ## Quickstart
 
@@ -38,27 +39,25 @@ jobs:
           github-token: ${{ github.token }}
 ```
 
-The action resolves the acting user from the GitHub user who applied the label (used for org pick and the per-user reuse label). The chat itself is owned by the user the `coder-token` belongs to. Set `acting-coder-username` to override the acting user; see [Identity](#identity-resolution) and [Security](#security-model) for the full model.
+The chat runs as whoever the `coder-token` belongs to; that identity is the only one the chats API supports. Workflows that target events that route to this action without `secrets.CODER_TOKEN` redaction (`issue_comment`, `pull_request_target`, etc.) must add their own `if:` gate; see [Security model](#security-model).
 
 ## Inputs
 
 | Name                   | Required | Default | Description |
 | ---------------------- | -------- | ------- | ----------- |
 | `coder-url`            | yes      |         | Coder deployment URL. |
-| `coder-token`          | yes      |         | Coder session token. |
+| `coder-token`          | yes      |         | Coder session token. The user this token belongs to is the chat owner; the chats API has no owner override. |
 | `chat-prompt`          | yes      |         | Prompt to send to the agent. |
-| `github-url`           | yes      |         | Issue or pull request URL. |
+| `github-url`           | yes      |         | Issue or pull request URL. Host is validated; only `https://github.com/<owner>/<repo>/issues/<n>` and `https://github.com/<owner>/<repo>/pull/<n>` are accepted. |
 | `github-token`         | yes      |         | Used to post and update comments. |
-| `acting-coder-username`       | no       |         | Override the acting Coder user used for org pick and the per-user reuse label. Mutually exclusive with `acting-github-user-id`. Bypasses the [trust gate](#security-model). Does NOT change the chat owner; the chat is always owned by the `coder-token` holder. |
-| `acting-github-user-id`       | no       |         | Resolve the acting Coder user from a linked GitHub id. Mutually exclusive with `acting-coder-username`. Does NOT change the chat owner. |
-| `coder-organization`   | no       |         | Coder organization name. Recommended for multi-org users. |
+| `coder-organization`   | no       |         | Coder organization name. Recommended for multi-org token owners. |
 | `workspace-id`         | no       |         | Pin the chat to an existing workspace. |
 | `model-config-id`      | no       |         | Model configuration to use. |
 | `existing-chat-id`     | no       |         | Send a follow-up to a known chat. Skips chat-reuse lookup. Mutually exclusive with `force-new-chat`. |
 | `comment-on-issue`     | no       | `true`  | Post the result on `github-url`. |
 | `wait`                 | no       | `none`  | `complete` polls every 5s until terminal status or `wait-timeout-seconds`. |
 | `wait-timeout-seconds` | no       | `600`   | Max wait when `wait: complete`. |
-| `idempotency-key`      | no       |         | Optional sharding key. See [Chat reuse](#chat-reuse). |
+| `idempotency-key`      | no       |         | Optional sharding key on the reuse scope. See [Chat reuse](#chat-reuse). |
 | `force-new-chat`       | no       | `false` | Skip chat-reuse lookup and always create. Mutually exclusive with `existing-chat-id`. |
 
 ## Outputs
@@ -70,7 +69,7 @@ The action resolves the acting user from the GitHub user who applied the label (
 | `chat-created`        | `true` if newly created, `false` if a message was sent to an existing chat. |
 | `chat-status`         | `waiting`, `pending`, `running`, `paused`, `completed`, `error`. |
 | `chat-title`          | Chat title. |
-| `acting-coder-username`      | Acting Coder username (org pick, reuse label). The chat owner is the `coder-token` holder, which may differ. |
+| `coder-username`      | Coder username the `coder-token` belongs to (always the chat owner). |
 | `workspace-id`        | Workspace UUID. |
 | `pull-request-url`    | PR or branch URL when the chat tracks changes. |
 | `pull-request-state`  | `open`, `closed`, `merged`. |
@@ -90,40 +89,33 @@ PR/diff outputs come from the chat's `diff_status` and are only reliable when th
 
 ### Identity resolution
 
-The chat itself is always owned by the user the `coder-token` belongs to: `POST /api/experimental/chats` has no owner override, so the API binds ownership to the session. The action separately resolves an **acting user** used for org pick and the per-user reuse label (`coder-agents-chat-action-user`). First source wins:
-
-1. `acting-coder-username` input. Used directly.
-2. `acting-github-user-id` input. Looked up by linked GitHub id; deleted Coder users are filtered.
-3. `github.context.payload.sender.id`. Available on most webhook events.
-4. `github.context.actor`. Resolved to a GitHub id via Octokit.
-5. `GET /api/v2/users/me` against the configured `coder-token`. Used when no input or workflow-context signal applies (`schedule` events, `workflow_dispatch` without sender or actor, custom `repository_dispatch` chains).
-
-If the acting user resolves via `acting-coder-username` or `acting-github-user-id` and the result differs from the `coder-token` owner, the action emits a `core.warning` naming both usernames. The chat is still owned by the token holder; the warning surfaces the divergence so the workflow author can confirm the token belongs to the intended user.
+There is one Coder identity in play. `POST /api/experimental/chats` binds the chat owner to the user the session token belongs to; the API has no owner override. The action calls `GET /api/v2/users/me` once to read the token owner's username and organization memberships, then creates the chat. The `coder-username` output is the token owner.
 
 ### Organization resolution
 
 1. `coder-organization` input. Looked up by name.
-2. First org membership of the resolved user. Non-deterministic for multi-org users; the action warns and recommends pinning `coder-organization`.
+2. First org membership of the token owner. Non-deterministic for multi-org users; the action warns and recommends pinning `coder-organization`.
 
 Either path fails with `chat-error-kind=org_not_found` when the org doesn't exist or the user has no memberships.
 
 ### Chat reuse
 
-By default the action reuses the most recent non-archived chat scoped to the same `github-url`, the same Coder user, and (when `GITHUB_WORKFLOW` is set) the same workflow name. Two workflows targeting the same PR keep separate chats. Re-running the same workflow continues one chat.
+By default the action reuses the most recent non-archived chat scoped to the same `github-url` and (when `GITHUB_WORKFLOW` is set) the same workflow name. Two workflows targeting the same PR keep separate chats. Re-running the same workflow continues one chat.
 
-Opt out per call with `force-new-chat: true`. Shard the scope further with `idempotency-key` to maintain multiple parallel chats on one target/user/workflow (for example, one per matrix dimension). `existing-chat-id` takes priority over both and skips the lookup.
+All chats this action creates are owned by the `coder-token` holder, so the reuse scope deliberately omits a per-actor label. Workflows that want per-actor separation pass it through `idempotency-key` themselves, for example `idempotency-key: ${{ github.actor }}`.
+
+Opt out per call with `force-new-chat: true`. Shard the scope further with `idempotency-key` to maintain multiple parallel chats on one target/workflow (for example, one per matrix dimension). `existing-chat-id` takes priority over both and skips the lookup.
 
 The action writes these labels on every chat it creates:
 
-| Label                                 | Value                       |
-| ------------------------------------- | --------------------------- |
-| `coder-agents-chat-action`            | `"true"`                    |
-| `gh-target`                           | `<owner>/<repo>#<number>`   |
-| `coder-agents-chat-action-user`       | `<coder-user-uuid>`         |
-| `coder-agents-chat-action-workflow`   | `<GITHUB_WORKFLOW>` (when set) |
-| `<sanitized-idempotency-key>`         | `"true"` (when set)         |
+| Label                                  | Value                          |
+| -------------------------------------- | ------------------------------ |
+| `coder-agents-chat-action`             | `"true"`                       |
+| `gh-target`                            | `<owner>/<repo>#<number>`      |
+| `coder-agents-chat-action-workflow`    | `<GITHUB_WORKFLOW>` (when set) |
+| `coder-agents-chat-action-idempotency` | `<sanitized idempotency-key>` (when set) |
 
-The `idempotency-key` input is sanitized to fit the platform's label-key regex (`^[a-zA-Z0-9][a-zA-Z0-9._/-]*$`, 64 bytes): lowercased, characters outside `[a-z0-9._/-]` replaced with `-`, leading non-alphanumerics trimmed, truncated. A value that sanitizes to a reserved label key is rejected at startup.
+The `idempotency-key` input is sanitized to fit the platform's label-value regex (`^[a-zA-Z0-9][a-zA-Z0-9._/-]*$`, 64 bytes): lowercased, characters outside `[a-z0-9._/-]` replaced with `-`, leading non-alphanumerics trimmed, truncated. The sanitizer is lossy: `MyKey!` and `MyKey?` both collapse to `mykey-`. Pass values you control (commit SHAs, label slugs, `github.actor`) rather than free-form titles.
 
 ### Wait mode
 
@@ -141,7 +133,7 @@ The action maintains one comment per `github-url` per workflow using a hidden HT
 
 ## Recipes
 
-### Doc-check on every PR, under a service account
+### Doc-check on every PR (gated against fork PRs)
 
 ```yaml
 name: Doc check
@@ -156,6 +148,12 @@ permissions:
 
 jobs:
   doc-check:
+    # Internal PRs only. `pull_request_target` exposes `secrets.*` to fork
+    # PRs by design, so the workflow must filter trust before invoking
+    # this action. Swap to a label-allowlist `if:` (for example,
+    # `contains(github.event.pull_request.labels.*.name, 'safe-to-review')`)
+    # if you want to gate via maintainer-applied labels instead.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: coder/agents-chat-action@v0
@@ -163,7 +161,6 @@ jobs:
           coder-url: ${{ secrets.CODER_URL }}
           coder-token: ${{ secrets.CODER_TOKEN }}
           coder-organization: ${{ secrets.CODER_ORG }}  # required if the bot belongs to more than one org
-          acting-coder-username: doc-check-bot
           chat-prompt: |
             Use the doc-check skill to review PR
             ${{ github.event.pull_request.html_url }}.
@@ -172,7 +169,7 @@ jobs:
           wait: complete
 ```
 
-`pull_request_target` runs against the base repo and has access to secrets even for fork PRs. The service-account identity bypasses the trust gate so fork PRs are reviewed under the bot's organization and reuse scope. The chat itself is owned by the `coder-token` holder regardless.
+`pull_request_target` runs against the base repo and has access to secrets even for fork PRs. The action's trust gate refuses fork PRs anyway, but the workflow-level `if:` is the right place to make the trust decision because it short-circuits before the runner starts the step. The chat is owned by the `coder-token` holder; the prompt is benign, but the agent will read PR content with its tools (see [Security model](#security-model)).
 
 ### Send a follow-up
 
@@ -225,10 +222,8 @@ The action sets `chat-error-kind` and `chat-error-message` on failure, posts a c
 | `chat-error-kind` | What happened | What to do |
 | ----------------- | ------------- | ---------- |
 | `spend_exceeded`  | Chat spend limit reached. Spent and limit are in the comment. | Wait for reset or raise the deployment's per-user limit. |
-| `user_not_found`  | No Coder user matched the GitHub identity. | Pass `acting-coder-username`, or have the user link their GitHub account in Coder. |
-| `user_ambiguous`  | Multiple live Coder users share the GitHub id. | Set `acting-coder-username` to disambiguate. |
-| `org_not_found`   | Org missing or the user has no memberships. The comment names which. | Fix or set `coder-organization`. |
-| `api_error`       | Any other Coder API error. The comment includes the underlying message; wrapped errors carry the original `CoderAPIError` via `Error.cause` and the workflow log renders the full cause chain. | Common causes: bad token, bad `workspace-id`, deployment unreachable. |
+| `org_not_found`   | Org missing or the token owner has no memberships. The comment names which. | Fix or set `coder-organization`. |
+| `api_error`       | Any other Coder API error, including trust-gate refusal and `github-url` host validation. The comment includes the underlying message in a code block; wrapped errors carry the original `CoderAPIError` via `Error.cause`, and the workflow log renders the full cause chain. | Common causes: bad token, bad `workspace-id`, deployment unreachable, fork PR refused by the trust gate, non-github.com `github-url`. |
 | `timeout`         | `wait: complete` didn't reach terminal in time. | Raise `wait-timeout-seconds`, or split the work. |
 
 Branch on the kind without parsing the message:
@@ -240,18 +235,36 @@ Branch on the kind without parsing the message:
 
 ## Security model
 
-The **chat owner** is fixed by the `coder-token`: `POST /api/experimental/chats` has no owner override, so every chat the action creates is owned by the user the token belongs to. Workflows running fork PRs with `secrets.CODER_TOKEN` available (the `pull_request_target` pattern) execute under the workflow's Coder identity, end of story. The primary mitigation against attacker-controlled prompts under your token is GitHub's own rule that `secrets.*` is unavailable to `pull_request` events from forks. Use `pull_request_target` only when you've gated execution accordingly.
+### The chat owner is the `coder-token` holder
 
-The **acting user** is the Coder identity resolved for org pick and the per-user reuse label (`coder-agents-chat-action-user`). It is NOT the chat owner. The trust gate protects this acting user from pollution by untrusted triggers, layered on top of (not in place of) GitHub's event-permission model. The gate refuses to auto-resolve when:
+`POST /api/experimental/chats` binds the chat owner to whoever the session token authenticates as. There is no owner override. Anyone who can read `secrets.CODER_TOKEN` acts as that Coder user end-to-end, including the agent's tool plane (shell, `gh`, `git push`, `coder external-auth`, MCP servers). Treat the token as a high-value secret. If your platform exposes per-user spend caps, template allowlists, tool allowlists, or scoped external_auth grants, use them on the token owner; this action cannot constrain what the agent can do once a chat exists.
 
-- The trigger is a fork pull request (`head.repo` null, `head.repo.fork === true`, or `head.repo.full_name !== base.repo.full_name`).
-- The trigger is a comment or review whose `comment.author_association` or `review.author_association` is not `OWNER`, `MEMBER`, or `COLLABORATOR`.
+### Trust gate is fail-closed; no input bypass
 
-Without the gate, an attacker who happens to have a linked Coder identity could open a fork PR or drop a drive-by comment and the action would attribute the chat (org pick, reuse label) to that identity. On refusal, the action does not fall back to `users/me`: a hostile trigger should not silently collapse onto the token owner. Setting `acting-coder-username` or `acting-github-user-id` bypasses the gate; the workflow author has chosen the identity explicitly.
+Before every chat creation, the action calls `classifyAutoResolveTrust` on the GitHub event payload and refuses untrusted triggers:
 
-The gate does not read `issue.author_association` or `pull_request.author_association` because those describe the resource opener, not the event sender (a MEMBER labeling a NONE user's issue is fine).
+- Fork pull requests (`head.repo` null, `head.repo.fork === true`, or `head.repo.full_name !== base.repo.full_name`).
+- Comment or review events whose `comment.author_association` or `review.author_association` is not `OWNER`, `MEMBER`, or `COLLABORATOR`.
 
-Independent of the gate: if your workflow uses `pull_request_target` to run against fork PRs, gate execution on author trust separately (label gating, manual approval). The trust gate covers the auto-resolved acting user only.
+There is no input bypass: dropping the previous `acting-*` overrides was deliberate. Workflows that target events where `secrets.CODER_TOKEN` is available alongside broad trigger access (`issue_comment`, `pull_request_review`, `pull_request_review_comment`, `pull_request_target`) must add their own `if:` gate before the step. Examples:
+
+- `if: github.event.pull_request.head.repo.full_name == github.repository` (internal PRs only).
+- `if: contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)` (trusted commenters only).
+- `if: contains(github.event.pull_request.labels.*.name, 'safe-to-review')` (label allowlist on a maintainer-applied label).
+
+The gate does not read `issue.author_association` or `pull_request.author_association` because those describe the resource opener, not the event sender (a `MEMBER` labeling a `NONE` user's issue is fine).
+
+### Indirect prompt injection (F1)
+
+The agent reads attacker-authored content during its run: PR titles, PR bodies, issue comments, diffs, and anything else the prompt tells it to fetch (`gh pr view`, `gh issue view --comments`, `gh pr diff`). The agent is a language model; it will follow embedded instructions in that content if they look plausible. Treat any public-repo trigger as adversarial regardless of the trust gate's verdict, because the gate decides whether to create the chat but does not constrain what the chat reads once it runs.
+
+The action ships no defense against this class. Mitigations live deployment-side:
+
+- Pin a hardened workspace template via `workspace-id` (minimal tools, no shell, scoped network egress).
+- Use Coder's platform controls to allowlist templates, restrict tool registrations, and scope the token owner's `external_auth` grants. See [Coder Agents platform controls](https://coder.com/docs/ai-coder/agents/platform-controls).
+- Keep `coder-token` on a dedicated, minimally-privileged Coder user. The chat's blast radius is whatever that user can reach inside Coder (workspaces, external auth grants, mounted secrets).
+
+The single-most-impactful mitigation against attacker-controlled prompts on a public repo is GitHub's own rule that `secrets.*` is not available to `pull_request` events from forks; the trust gate is a second checkpoint on top of that, not a replacement.
 
 ## Limitations
 

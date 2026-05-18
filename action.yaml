@@ -27,14 +27,6 @@ inputs:
     description: "GitHub token used to post and update issue comments."
     required: true
 
-  acting-github-user-id:
-    description: "GitHub user ID. Resolves the acting Coder user (used for org pick and the per-user reuse label) by linked GitHub id. Does NOT change the chat owner; the chat is always owned by the `coder-token` holder. Mutually exclusive with acting-coder-username."
-    required: false
-
-  acting-coder-username:
-    description: "Override the acting Coder user used for org pick and the per-user reuse label. Mutually exclusive with acting-github-user-id. Does NOT change the chat owner; the chat is always owned by the `coder-token` holder. Useful when the workflow's token belongs to one user but the action should attribute the run to another."
-    required: false
-
   coder-organization:
     description: "Coder organization name. Looked up by name to resolve the organization UUID for chat creation. Recommended when the resolved Coder user belongs to more than one organization, since the fallback choice is non-deterministic."
     required: false
@@ -76,8 +68,8 @@ inputs:
     default: "false"
 
 outputs:
-  acting-coder-username:
-    description: "The acting Coder username (used for org pick and the per-user reuse label). The chat owner is the `coder-token` holder, which may differ."
+  coder-username:
+    description: "The Coder username the `coder-token` belongs to (always the chat owner; the chats API has no owner override)."
 
   chat-id:
     description: "The chat ID."

@@ -8,8 +8,8 @@
 export const ACTION_LABEL_KEYS = {
 	marker: "coder-agents-chat-action",
 	target: "gh-target",
-	user: "coder-agents-chat-action-user",
 	workflow: "coder-agents-chat-action-workflow",
+	idempotency: "coder-agents-chat-action-idempotency",
 } as const;
 
 /**

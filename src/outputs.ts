@@ -9,7 +9,7 @@ export const OUTPUT_MAP: ReadonlyArray<{
 	prop: keyof ActionOutputs;
 	required?: boolean;
 }> = [
-	{ name: "acting-coder-username", prop: "coderUsername", required: true },
+	{ name: "coder-username", prop: "coderUsername", required: true },
 	{ name: "chat-id", prop: "chatId", required: true },
 	{ name: "chat-url", prop: "chatUrl", required: true },
 	{ name: "chat-created", prop: "chatCreated", required: true },
@@ -61,6 +61,6 @@ export function setFailureOutputs(error: ActionFailureError): void {
 		core.setOutput("chat-url", error.chatUrl);
 	}
 	if (error.coderUsername) {
-		core.setOutput("acting-coder-username", error.coderUsername);
+		core.setOutput("coder-username", error.coderUsername);
 	}
 }

@@ -35,7 +35,7 @@ function captureSetOutput(): {
 describe("OUTPUT_MAP", () => {
 	test("declares an entry for every action.yaml output", () => {
 		const expected = [
-			"acting-coder-username",
+			"coder-username",
 			"chat-id",
 			"chat-url",
 			"chat-created",
@@ -61,7 +61,7 @@ describe("OUTPUT_MAP", () => {
 	test("required entries are exactly the four base outputs", () => {
 		const required = OUTPUT_MAP.filter((e) => e.required).map((e) => e.name);
 		expect(required).toEqual([
-			"acting-coder-username",
+			"coder-username",
 			"chat-id",
 			"chat-url",
 			"chat-created",
@@ -87,7 +87,7 @@ describe("setActionOutputs", () => {
 			setActionOutputs(baseOutputs);
 			const names = cap.calls.map(([n]) => n).sort();
 			expect(names).toEqual(
-				["chat-created", "chat-id", "chat-url", "acting-coder-username"].sort(),
+				["chat-created", "chat-id", "chat-url", "coder-username"].sort(),
 			);
 		} finally {
 			cap.restore();
@@ -167,7 +167,7 @@ describe("setActionOutputs", () => {
 				...baseOutputs,
 				coderUsername: undefined as unknown as string,
 			});
-			const username = cap.calls.find(([n]) => n === "acting-coder-username");
+			const username = cap.calls.find(([n]) => n === "coder-username");
 			expect(username).toBeDefined();
 			expect(username?.[1]).toBe("");
 		} finally {
@@ -219,7 +219,7 @@ describe("setFailureOutputs", () => {
 			expect(names).not.toContain("chat-id");
 			expect(names).not.toContain("chat-status");
 			expect(names).not.toContain("chat-url");
-			expect(names).not.toContain("acting-coder-username");
+			expect(names).not.toContain("coder-username");
 		} finally {
 			cap.restore();
 		}
@@ -266,7 +266,7 @@ describe("setFailureOutputs", () => {
 		}
 	});
 
-	test("emits chat-url and acting-coder-username when decorated", () => {
+	test("emits chat-url and coder-username when decorated", () => {
 		const cap = captureSetOutput();
 		try {
 			const err = new ActionFailureError("timeout", "Timed out", mockChat);
@@ -279,7 +279,7 @@ describe("setFailureOutputs", () => {
 				"chat-url",
 				"https://coder.test/agents/abc",
 			]);
-			expect(cap.calls).toContainEqual(["acting-coder-username", "testuser"]);
+			expect(cap.calls).toContainEqual(["coder-username", "testuser"]);
 		} finally {
 			cap.restore();
 		}

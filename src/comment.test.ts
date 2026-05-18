@@ -11,6 +11,7 @@ import {
 	type FailureDetail,
 	findCommentByPredicate,
 	normalizeBaseUrl,
+	renderDetailBlock,
 	type SuccessCommentContext,
 } from "./comment";
 
@@ -63,12 +64,16 @@ describe("deriveCommentKey", () => {
 		).toBe("owner/repo#42");
 	});
 
-	test("handles enterprise GitHub URLs", () => {
+	test("falls back to the raw URL for non-github.com hosts (host validation)", () => {
+		// F6 in the security review: the regex now anchors to github.com
+		// so an enterprise host (or attacker-chosen host) does not parse
+		// out a usable owner/repo. The marker still collapses identical
+		// URLs across re-runs, but does not pretend to know the target.
 		expect(
 			deriveCommentKey({
 				githubURL: "https://code.acme.com/owner/repo/issues/42",
 			}),
-		).toBe("owner/repo#42");
+		).toBe("https://code.acme.com/owner/repo/issues/42");
 	});
 
 	test("appends workflow suffix to the derived per-target key", () => {
@@ -421,6 +426,45 @@ describe("buildDeploymentAgentsUrl", () => {
 		);
 		expect(buildDeploymentAgentsUrl("https://coder.test/#a")).toBe(
 			"https://coder.test/agents",
+		);
+	});
+});
+
+describe("renderDetailBlock", () => {
+	test("wraps a plain message in a 4-backtick fenced block", () => {
+		// F9 in the security review: attacker-influenced strings flowing
+		// through `detail.message` must not break out of the markdown
+		// list context. The body now renders inside a 4-backtick fence.
+		const body = renderDetailBlock("plain message");
+		expect(body).toBe("- Detail:\n````\nplain message\n````");
+	});
+
+	test("neutralizes a markdown-injection attempt with backtick fences", () => {
+		// An adversarial chat.last_error containing a 3-backtick block
+		// would close the surrounding fence and inject markdown after.
+		// 4-backtick fences keep the 3-backtick content inside the code
+		// block.
+		const body = renderDetailBlock("````\nclose-then-inject\n````");
+		// The 4-backtick run inside the message is downgraded to 3 so
+		// the surrounding 4-backtick fence stays the only sequence that
+		// closes the block.
+		expect(body).toBe("- Detail:\n````\n```\nclose-then-inject\n```\n````");
+	});
+
+	test("strips control bytes other than newline and tab", () => {
+		// CR-only line endings or ANSI escapes flow through agent error
+		// wrappers; stripping them keeps the comment renderer
+		// predictable and avoids terminal-escape leakage if an operator
+		// pipes the comment body to a terminal.
+		const body = renderDetailBlock("a\u0000b\u0007c\nd\te");
+		expect(body).toBe("- Detail:\n````\nabc\nd\te\n````");
+	});
+
+	test("caps the message at 4000 characters", () => {
+		const body = renderDetailBlock("x".repeat(10000));
+		// Header + fence open + 4000 chars + fence close + 3 newlines.
+		expect(body.length).toBe(
+			"- Detail:\n````\n".length + 4000 + "\n````".length,
 		);
 	});
 });

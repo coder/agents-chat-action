@@ -15,7 +15,6 @@ const actionInputValid: ActionInputs = {
 	chatPrompt: "test prompt",
 	githubURL: "https://github.com/owner/repo/issues/123",
 	githubToken: "github-token",
-	githubUserID: 12345,
 	commentOnIssue: true,
 	wait: "none",
 	waitTimeoutSeconds: DEFAULT_WAIT_TIMEOUT_SECONDS,
@@ -32,7 +31,6 @@ describe("ActionInputsSchema", () => {
 			expect(result.chatPrompt).toBe(actionInputValid.chatPrompt);
 			expect(result.githubURL).toBe(actionInputValid.githubURL);
 			expect(result.githubToken).toBe(actionInputValid.githubToken);
-			expect(result.githubUserID).toBe(actionInputValid.githubUserID);
 		});
 
 		test("accepts optional workspace-id", () => {
@@ -97,13 +95,6 @@ describe("ActionInputsSchema", () => {
 				expect(result.coderURL).toBe(url);
 			}
 		});
-
-		test("accepts both acting-github-user-id and acting-coder-username unset", () => {
-			const { githubUserID: _, ...withoutGithubUserID } = actionInputValid;
-			const result = ActionInputsSchema.parse(withoutGithubUserID);
-			expect(result.githubUserID).toBeUndefined();
-			expect(result.coderUsername).toBeUndefined();
-		});
 	});
 
 	describe("Invalid Input Cases", () => {
@@ -157,85 +148,6 @@ describe("ActionInputsSchema", () => {
 				...withoutGithubURL,
 				githubIssueURL: "https://github.com/owner/repo/issues/123",
 			};
-			expect(() => ActionInputsSchema.parse(input)).toThrow();
-		});
-	});
-
-	describe("User Identification (Mutual Exclusion)", () => {
-		test("accepts input with only githubUserID", () => {
-			const result = ActionInputsSchema.parse(actionInputValid);
-			expect(result.githubUserID).toBe(12345);
-			expect(result.coderUsername).toBeUndefined();
-		});
-
-		test("accepts input with only coderUsername", () => {
-			const { githubUserID: _, ...withoutGithubUserID } = actionInputValid;
-			const input = { ...withoutGithubUserID, coderUsername: "testuser" };
-			const result = ActionInputsSchema.parse(input);
-			expect(result.coderUsername).toBe("testuser");
-			expect(result.githubUserID).toBeUndefined();
-		});
-
-		test("rejects input with both githubUserID and coderUsername", () => {
-			const input = {
-				...actionInputValid,
-				coderUsername: "testuser",
-			};
-			expect(() => ActionInputsSchema.parse(input)).toThrow(
-				/acting-github-user-id and acting-coder-username/,
-			);
-		});
-
-		test("rejects input with both existingChatId and forceNewChat", () => {
-			const input = {
-				...actionInputValid,
-				existingChatId: "00000000-0000-0000-0000-000000000001",
-				forceNewChat: true,
-			};
-			expect(() => ActionInputsSchema.parse(input)).toThrow(
-				/existing-chat-id and force-new-chat/,
-			);
-		});
-
-		test("rejects githubUserID of 0", () => {
-			const input = {
-				...actionInputValid,
-				githubUserID: 0,
-			};
-			expect(() => ActionInputsSchema.parse(input)).toThrow();
-		});
-
-		test("rejects negative githubUserID", () => {
-			const input = {
-				...actionInputValid,
-				githubUserID: -1,
-			};
-			expect(() => ActionInputsSchema.parse(input)).toThrow();
-		});
-
-		// The schema's `.int().positive()` already rejected NaN before
-		// this PR. We pin it here so the schema cannot silently relax
-		// to admit `NaN`, which is what the parser produces for any
-		// non-decimal input (see src/index.test.ts).
-		test("rejects NaN githubUserID", () => {
-			const input = {
-				...actionInputValid,
-				githubUserID: Number.NaN,
-			};
-			expect(() => ActionInputsSchema.parse(input)).toThrow();
-		});
-
-		test("rejects non-integer githubUserID", () => {
-			const input = {
-				...actionInputValid,
-				githubUserID: 12.5,
-			};
-			expect(() => ActionInputsSchema.parse(input)).toThrow();
-		});
-
-		test("rejects empty coderUsername", () => {
-			const { githubUserID: _, ...withoutGithubUserID } = actionInputValid;
-			const input = { ...withoutGithubUserID, coderUsername: "" };
 			expect(() => ActionInputsSchema.parse(input)).toThrow();
 		});
 	});

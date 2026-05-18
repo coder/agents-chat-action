@@ -8,19 +8,11 @@ import { normalizeBaseUrl } from "./url";
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 export interface CoderClient {
-	getCoderUserByGitHubId(
-		githubUserId: number | undefined,
-	): Promise<CoderSDKUser>;
-
-	getCoderUserByUsername(username: string): Promise<CoderSDKUser>;
-
 	/**
 	 * Resolve the Coder user the configured `coder-token` belongs to via
 	 * `GET /api/v2/users/me`. The chat owner on `POST /api/experimental/chats`
 	 * is always the token holder (the API has no owner override), so this is
-	 * the identity the chat actually runs as. The action uses this as the
-	 * lowest-priority identity-resolution fallback and as the source of truth
-	 * for the token-owner vs acting-user divergence warning.
+	 * the Coder identity the chat runs as.
 	 */
 	getAuthenticatedUser(): Promise<CoderSDKUser>;
 
@@ -108,70 +100,6 @@ export class RealCoderClient implements CoderClient {
 		return response.json() as Promise<T>;
 	}
 
-	async getCoderUserByGitHubId(
-		githubUserId: number | undefined,
-	): Promise<CoderSDKUser> {
-		if (githubUserId === undefined) {
-			throw new CoderAPIError("GitHub user ID cannot be undefined", 400);
-		}
-		if (githubUserId === 0) {
-			// Defense in depth: the input schema rejects 0 upstream. Throw
-			// CoderAPIError so `instanceof` checks and classifyError routing
-			// downstream stay sound.
-			throw new CoderAPIError("GitHub user ID cannot be 0", 400);
-		}
-		// coderd's GetUsers SQL hardcodes `users.deleted = false`, so the
-		// response is already filtered server-side. The client-side
-		// filter below is forward-compatible defense in depth in case
-		// `codersdk.User` later starts serializing `deleted`.
-		const filter = `github_com_user_id:${githubUserId}`;
-		const endpoint = `/api/v2/users?q=${encodeURIComponent(filter)}`;
-		const response = await this.request<unknown>(endpoint);
-		const userList = CoderSDKGetUsersResponseSchema.parse(response);
-		const liveUsers = userList.users.filter((u) => !u.deleted);
-		if (liveUsers.length === 0) {
-			throw new CoderAPIError(
-				`No Coder user found with GitHub user ID ${githubUserId}`,
-				404,
-				undefined,
-				"user_not_found",
-			);
-		}
-		if (liveUsers.length > 1) {
-			throw new CoderAPIError(
-				`Multiple Coder users found with GitHub user ID ${githubUserId}`,
-				409,
-				undefined,
-				"user_ambiguous",
-			);
-		}
-		return CoderSDKUserSchema.parse(liveUsers[0]);
-	}
-
-	async getCoderUserByUsername(username: string): Promise<CoderSDKUser> {
-		if (!username) {
-			throw new CoderAPIError("Coder username cannot be empty", 400);
-		}
-		const endpoint = `/api/v2/users/${encodeURIComponent(username)}`;
-		try {
-			const response = await this.request<unknown>(endpoint);
-			return CoderSDKUserSchema.parse(response);
-		} catch (err) {
-			// Re-throw 404 with the `user_not_found` kind so `classifyError`
-			// routes a typo in `acting-coder-username` to the helpful failure
-			// comment rather than a generic `api_error`.
-			if (err instanceof CoderAPIError && err.statusCode === 404) {
-				throw new CoderAPIError(
-					`No Coder user found with username "${username}"`,
-					404,
-					err.response,
-					"user_not_found",
-				);
-			}
-			throw err;
-		}
-	}
-
 	async getAuthenticatedUser(): Promise<CoderSDKUser> {
 		// `users/me` resolves the session token to its owning user. No
 		// caching here; callers memoize when they need to reference the
@@ -242,8 +170,8 @@ export const ChatIdSchema = z.string().uuid().brand("ChatId");
 export type ChatId = z.infer<typeof ChatIdSchema>;
 
 // `deleted` is parsed leniently: `codersdk.User` does not currently
-// serialize it, but we declare it so the filter in
-// `getCoderUserByGitHubId` keeps working if the API exposes it later.
+// serialize it. The field is retained for forward compatibility with a
+// future server schema that exposes it.
 export const CoderSDKUserSchema = z.object({
 	id: z.string().uuid(),
 	username: z.string(),
@@ -253,13 +181,6 @@ export const CoderSDKUserSchema = z.object({
 	deleted: z.boolean().optional(),
 });
 export type CoderSDKUser = z.infer<typeof CoderSDKUserSchema>;
-
-export const CoderSDKGetUsersResponseSchema = z.object({
-	users: z.array(CoderSDKUserSchema),
-});
-export type CoderSDKGetUsersResponse = z.infer<
-	typeof CoderSDKGetUsersResponseSchema
->;
 
 // Organization schema. Returned by `GET /api/v2/organizations/{name}` and
 // used to resolve the `coder-organization` input to a UUID for createChat.

@@ -16,13 +16,49 @@ type Octokit = ReturnType<typeof getOctokit>;
 
 // Shared regex for GitHub issue and PR URLs. Used by `deriveCommentKey` and
 // `parseGithubURL` so adding another path (e.g. `/discussions/`) is one edit.
-// Anchored at the tail so URLs with extra path segments after the number
-// (e.g. `.../issues/123/files`) are rejected rather than silently truncated.
-// The `(?:[?#].*)?` group keeps the anchor tolerant of query strings and
-// fragments that real-world `github-url` inputs can carry (e.g. a URL copied
-// while viewing a specific comment).
+// Anchored at both ends so a non-github host or extra path segments
+// (e.g. `.../issues/123/files`, `https://attacker.example/owner/repo/issues/1`)
+// are rejected rather than silently truncated. The `(?:[?#].*)?` group keeps
+// the anchor tolerant of query strings and fragments that real-world
+// `github-url` inputs can carry (e.g. a URL copied while viewing a specific
+// comment).
 export const GITHUB_URL_REGEX =
-	/([^/]+)\/([^/]+)\/(?:issues|pull)\/(\d+)\/?(?:[?#].*)?$/;
+	/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:issues|pull)\/(\d+)\/?(?:[?#].*)?$/;
+
+/**
+ * Parsed components of a `github-url` input. Returned by
+ * `parseGithubItemURL` after host and path validation.
+ */
+export interface GithubItemURL {
+	owner: string;
+	repo: string;
+	number: number;
+}
+
+/**
+ * Validate `input` as a `https://github.com/<owner>/<repo>/(issues|pull)/<n>`
+ * URL and return its components, or `undefined` if it does not match. The
+ * host is anchored to `github.com` so a workflow that templates user-
+ * controlled content into `github-url` cannot coerce the action into
+ * commenting on an arbitrary attacker-chosen owner/repo (F6 in the
+ * security review).
+ */
+export function parseGithubItemURL(
+	input: string | undefined,
+): GithubItemURL | undefined {
+	if (!input) {
+		return undefined;
+	}
+	const match = input.match(GITHUB_URL_REGEX);
+	if (!match) {
+		return undefined;
+	}
+	return {
+		owner: match[1],
+		repo: match[2],
+		number: Number.parseInt(match[3], 10),
+	};
+}
 
 // Discriminated union so spend-exceeded fields are only representable on the
 // spend-exceeded variant; the body builder reads them directly without a
@@ -212,6 +248,27 @@ function formatMicrosAsDollars(micros: number): string {
 	return `$${dollars.toFixed(2)}`;
 }
 
+/**
+ * Render `detail.message` (or any externally-influenced string) inside a
+ * fenced code block so markdown syntax in the message body cannot break
+ * out of the failure-comment list. The fence is 4 backticks; any literal
+ * 4-or-more backtick run in the message is downgraded to 3 so the
+ * surrounding fence stays closable. Control bytes other than newline and
+ * tab are stripped so adversarial content cannot inject CR-only line
+ * endings or other terminal escapes. The result is capped at 4000 chars
+ * to bound comment size against runaway messages.
+ */
+export function renderDetailBlock(message: string): string {
+	const stripped = message.replace(
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping C0 controls is the point.
+		/[\x00-\x08\x0B-\x1F\x7F]/g,
+		"",
+	);
+	const capped = stripped.length > 4000 ? stripped.slice(0, 4000) : stripped;
+	const safe = capped.replace(/`{4,}/g, "```");
+	return `- Detail:\n\`\`\`\`\n${safe}\n\`\`\`\``;
+}
+
 export interface FailureCommentContext {
 	agentsUrl: string;
 	marker: string;
@@ -266,7 +323,7 @@ export function buildFailureCommentBody(
 					"linked to a Coder user) or pass `acting-coder-username` directly.",
 				"",
 				`- chat-error-kind=${detail.kind}`,
-				`- Detail: ${detail.message}`,
+				renderDetailBlock(detail.message),
 				"",
 				linkLine,
 			);
@@ -279,7 +336,7 @@ export function buildFailureCommentBody(
 					"per-user reuse label).",
 				"",
 				`- chat-error-kind=${detail.kind}`,
-				`- Detail: ${detail.message}`,
+				renderDetailBlock(detail.message),
 				"",
 				linkLine,
 			);
@@ -290,7 +347,7 @@ export function buildFailureCommentBody(
 					"`coder-organization` input or grant the user a membership.",
 				"",
 				`- chat-error-kind=${detail.kind}`,
-				`- Detail: ${detail.message}`,
+				renderDetailBlock(detail.message),
 				"",
 				linkLine,
 			);
@@ -299,7 +356,7 @@ export function buildFailureCommentBody(
 			lines.push(apiErrorPhrase(runPhase, ctx), "");
 			lines.push(
 				`- chat-error-kind=${detail.kind}`,
-				`- Detail: ${detail.message}`,
+				renderDetailBlock(detail.message),
 			);
 			if (ctx.chatStatus === "error") {
 				lines.push(
@@ -318,7 +375,7 @@ export function buildFailureCommentBody(
 					"`wait-timeout-seconds`.",
 				"",
 				`- chat-error-kind=${detail.kind}`,
-				`- Detail: ${detail.message}`,
+				renderDetailBlock(detail.message),
 				"",
 				linkLine,
 			);
