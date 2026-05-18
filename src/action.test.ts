@@ -8,10 +8,7 @@ import {
 } from "./action";
 import type { Octokit } from "./action";
 import { CoderAPIError } from "./coder-client";
-import {
-	ChatIdSchema,
-	type CoderChat,
-} from "./coder-client";
+import { ChatIdSchema, type CoderChat } from "./coder-client";
 import { ActionOutputsSchema } from "./schemas";
 import {
 	MockCoderClient,
