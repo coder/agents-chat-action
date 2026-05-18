@@ -593,31 +593,6 @@ describe("CoderAgentChatAction", () => {
 		});
 	});
 
-	test("creates a chat under the token owner returned by users/me", async () => {
-		coderClient.mockGetAuthenticatedUser.mockResolvedValue(mockUser);
-		coderClient.mockCreateChat.mockResolvedValue(mockChat);
-
-		const inputs = createMockInputs({
-			commentOnIssue: false,
-		});
-		const action = new CoderAgentChatAction(
-			coderClient,
-			octokit as unknown as Octokit,
-			inputs,
-		);
-
-		const result = await action.run();
-
-		// users/me is the single source of identity now; assert it was
-		// called and a chat was created under the resulting username.
-		expect(coderClient.mockGetAuthenticatedUser).toHaveBeenCalled();
-		expect(coderClient.mockCreateChat).toHaveBeenCalled();
-
-		const parsedResult = ActionOutputsSchema.parse(result);
-		expect(parsedResult.coderUsername).toBe(mockUser.username);
-		expect(parsedResult.chatCreated).toBe(true);
-	});
-
 	test("sends message to existing chat", async () => {
 		coderClient.mockGetAuthenticatedUser.mockResolvedValue(mockUser);
 		coderClient.mockCreateChatMessage.mockResolvedValue(
@@ -783,46 +758,6 @@ describe("CoderAgentChatAction", () => {
 
 			expect(octokit.rest.issues.listComments).toHaveBeenCalled();
 			expect(octokit.rest.issues.createComment).toHaveBeenCalled();
-		});
-	});
-
-	describe("warnUnwiredInputs", () => {
-		test("does not warn for wait=complete", () => {
-			const warning = spyOn(core, "warning").mockImplementation(() => {});
-			try {
-				const inputs = createMockInputs({ wait: "complete" });
-				const action = new CoderAgentChatAction(
-					coderClient,
-					octokit as unknown as Octokit,
-					inputs,
-				);
-
-				action.warnUnwiredInputs();
-
-				expect(warning).not.toHaveBeenCalledWith(
-					expect.stringContaining("`wait: complete`"),
-				);
-			} finally {
-				warning.mockRestore();
-			}
-		});
-
-		test("does not warn at defaults", () => {
-			const warning = spyOn(core, "warning").mockImplementation(() => {});
-			try {
-				const inputs = createMockInputs();
-				const action = new CoderAgentChatAction(
-					coderClient,
-					octokit as unknown as Octokit,
-					inputs,
-				);
-
-				action.warnUnwiredInputs();
-
-				expect(warning).not.toHaveBeenCalled();
-			} finally {
-				warning.mockRestore();
-			}
 		});
 	});
 
@@ -1617,6 +1552,41 @@ describe("CoderAgentChatAction", () => {
 				expect(call?.body).toContain(
 					"<!-- coder-agents-chat-action:test-org/test-repo#123 -->",
 				);
+			},
+		);
+
+		test(
+			"posts a failure comment with the org_not_found template body when " +
+				"resolveOrganizationID throws ActionFailureError(org_not_found)",
+			async () => {
+				// Without the ActionFailureError pre-check in handleFailure, this
+				// path classifies the thrown ActionFailureError as `api_error`
+				// and renders the api_error template, so the comment body
+				// disagrees with the `chat-error-kind` output.
+				coderClient.mockGetAuthenticatedUser.mockResolvedValue(mockUserNoOrgs);
+				octokit.rest.issues.listComments.mockResolvedValue({
+					data: [],
+				} as ReturnType<typeof octokit.rest.issues.listComments>);
+				octokit.rest.issues.createComment.mockResolvedValue(
+					{} as ReturnType<typeof octokit.rest.issues.createComment>,
+				);
+
+				const inputs = createMockInputs({ coderOrganization: undefined });
+				const action = new CoderAgentChatAction(
+					coderClient,
+					octokit as unknown as Octokit,
+					inputs,
+				);
+
+				await expect(action.run()).rejects.toThrow();
+
+				expect(octokit.rest.issues.createComment).toHaveBeenCalledTimes(1);
+				const call = octokit.rest.issues.createComment.mock.calls[0]?.[0] as
+					| { body: string }
+					| undefined;
+				expect(call?.body).toContain("chat-error-kind=org_not_found");
+				expect(call?.body).toContain("no matching organization");
+				expect(call?.body).not.toContain("An unexpected error occurred");
 			},
 		);
 

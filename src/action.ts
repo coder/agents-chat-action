@@ -187,17 +187,6 @@ export class CoderAgentChatAction {
 	}
 
 	/**
-	 * Warn loudly when the user opts in to inputs whose runtime behavior
-	 * is not yet wired. The schema accepts these so the contract is stable;
-	 * the warning prevents silent no-ops for workflow authors who explicitly
-	 * opt in.
-	 */
-	warnUnwiredInputs(): void {
-		// All v0 inputs are now wired. The helper remains for the test
-		// suite import and future unwired inputs.
-	}
-
-	/**
 	 * Build a rich ActionOutputs from a Chat response.
 	 */
 	buildOutputs(
@@ -493,9 +482,16 @@ export class CoderAgentChatAction {
 	// the failure-path output contract is uniform.
 	private async handleFailure(error: unknown): Promise<ActionFailureError> {
 		// `detail` is the comment-body shape; `failure` is the thrown shape.
-		// Classify first so spend-exceeded fields land in the comment body
-		// for both raw-Error and ActionFailureError inputs.
-		const detail: FailureDetail = classifyError(error);
+		// Pass an ActionFailureError's `kind` through to the body so the
+		// posted comment matches `chat-error-kind`. `classifyError` lives
+		// in `comment.ts` and cannot import `ActionFailureError` (cycle).
+		// `spend_exceeded` carries extra fields on the body variant and is
+		// only ever produced by `classifyError`, never thrown as an
+		// ActionFailureError, so the narrow is exhaustive.
+		const detail: FailureDetail =
+			error instanceof ActionFailureError && error.kind !== "spend_exceeded"
+				? { kind: error.kind, message: error.message }
+				: classifyError(error);
 		const failure =
 			error instanceof ActionFailureError
 				? error
@@ -545,8 +541,6 @@ export class CoderAgentChatAction {
 	}
 
 	private async runInner(): Promise<ActionOutputs> {
-		this.warnUnwiredInputs();
-
 		const { githubOrg, githubRepo, githubIssueNumber } = this.parseGithubURL();
 		core.info(`GitHub owner: ${githubOrg}`);
 		core.info(`GitHub repo: ${githubRepo}`);

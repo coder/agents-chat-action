@@ -1,12 +1,8 @@
 import * as core from "@actions/core";
 import type { getOctokit } from "@actions/github";
-import {
-	type ChatErrorKind,
-	type ChatStatus,
-	CoderAPIError,
-} from "./coder-client";
+import { type ChatStatus, CoderAPIError } from "./coder-client";
 import { sanitizeLabelToken } from "./sanitize-label-token";
-import type { ActionInputs } from "./schemas";
+import type { ActionInputs, ChatErrorKind } from "./schemas";
 import { normalizeBaseUrl } from "./url";
 
 // Re-export so `action.ts` and tests keep their existing import sites.
@@ -75,9 +71,9 @@ export type FailureDetail =
 	  };
 
 // chat-error-kind enum surfaced as the action's `chat-error-kind` output.
-// Re-exported from `coder-client.ts`; this re-export keeps the name local
-// to `comment.ts` callers and `index.ts` for backward source compatibility.
-export type { ChatErrorKind } from "./coder-client";
+// Re-exported so callers can import the type from `comment.ts` next to
+// `FailureDetail` / `classifyError` / `buildFailureCommentBody`.
+export type { ChatErrorKind } from "./schemas";
 
 const COMMENT_MARKER_PREFIX = "<!-- coder-agents-chat-action:";
 const COMMENT_MARKER_SUFFIX = " -->";

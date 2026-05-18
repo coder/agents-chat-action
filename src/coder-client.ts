@@ -284,16 +284,6 @@ export type CreateChatMessageResponse = z.infer<
 	typeof CreateChatMessageResponseSchema
 >;
 
-// Full enum for the `chat-error-kind` action output. The action populates
-// these downstream when API errors are mapped to outputs.
-export const ChatErrorKindSchema = z.enum([
-	"org_not_found",
-	"spend_exceeded",
-	"api_error",
-	"timeout",
-]);
-export type ChatErrorKind = z.infer<typeof ChatErrorKindSchema>;
-
 /**
  * CoderAPIError carries the status code and raw response body from a Coder
  * API failure. The body is preserved verbatim so the failure-path

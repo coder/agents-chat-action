@@ -26875,12 +26875,6 @@ var CreateChatMessageRequestSchema = exports_external.object({
 var CreateChatMessageResponseSchema = exports_external.object({
   queued: exports_external.boolean()
 });
-var ChatErrorKindSchema = exports_external.enum([
-  "org_not_found",
-  "spend_exceeded",
-  "api_error",
-  "timeout"
-]);
 
 class CoderAPIError extends Error {
   statusCode;
@@ -27254,7 +27248,6 @@ class CoderAgentChatAction {
       marker
     });
   }
-  warnUnwiredInputs() {}
   buildOutputs(coderUsername, chat, chatCreated) {
     const diff = chat.diff_status;
     const hasPR = diff?.pr_number != null;
@@ -27388,7 +27381,7 @@ class CoderAgentChatAction {
     }
   }
   async handleFailure(error3) {
-    const detail = classifyError(error3);
+    const detail = error3 instanceof ActionFailureError && error3.kind !== "spend_exceeded" ? { kind: error3.kind, message: error3.message } : classifyError(error3);
     const failure = error3 instanceof ActionFailureError ? error3 : new ActionFailureError(detail.kind, detail.message, undefined, {
       cause: error3
     });
@@ -27421,7 +27414,6 @@ class CoderAgentChatAction {
     return failure;
   }
   async runInner() {
-    this.warnUnwiredInputs();
     const { githubOrg, githubRepo, githubIssueNumber } = this.parseGithubURL();
     core2.info(`GitHub owner: ${githubOrg}`);
     core2.info(`GitHub repo: ${githubRepo}`);
@@ -27672,7 +27664,7 @@ var ActionInputsSchema = ActionInputsObjectSchema.refine((data) => !(data.existi
   message: "Cannot set both existing-chat-id and force-new-chat; choose one.",
   path: ["forceNewChat"]
 });
-var ChatErrorKindSchema2 = exports_external.enum([
+var ChatErrorKindSchema = exports_external.enum([
   "spend_exceeded",
   "org_not_found",
   "api_error",
@@ -27695,7 +27687,7 @@ var ActionOutputsSchema = exports_external.object({
   changedFiles: exports_external.number().optional(),
   headBranch: exports_external.string().optional(),
   baseBranch: exports_external.string().optional(),
-  chatErrorKind: ChatErrorKindSchema2.optional(),
+  chatErrorKind: ChatErrorKindSchema.optional(),
   chatErrorMessage: exports_external.string().optional()
 });
 
