@@ -4,10 +4,6 @@ import { z } from "zod";
 // in sync if either changes.
 export const DEFAULT_WAIT_TIMEOUT_SECONDS = 600;
 
-// Mutual exclusion of github-user-id and coder-username is enforced by
-// the wrapper schema below. Both identity inputs are optional at the
-// object level so the runtime can later auto-resolve from the workflow
-// context.
 const ActionInputsObjectSchema = z.object({
 	chatPrompt: z.string().min(1),
 	coderToken: z.string().min(1),
@@ -15,8 +11,6 @@ const ActionInputsObjectSchema = z.object({
 	coderOrganization: z.string().min(1).optional(),
 	githubURL: z.string().url(),
 	githubToken: z.string().min(1),
-	githubUserID: z.number().int().positive().optional(),
-	coderUsername: z.string().min(1).optional(),
 	workspaceId: z.string().uuid().optional(),
 	modelConfigId: z.string().uuid().optional(),
 	existingChatId: z.string().uuid().optional(),
@@ -32,13 +26,6 @@ const ActionInputsObjectSchema = z.object({
 });
 
 export const ActionInputsSchema = ActionInputsObjectSchema.refine(
-	(data) =>
-		!(data.githubUserID !== undefined && data.coderUsername !== undefined),
-	{
-		message: "Cannot set both github-user-id and coder-username; choose one.",
-		path: ["coderUsername"],
-	},
-).refine(
 	(data) => !(data.existingChatId !== undefined && data.forceNewChat === true),
 	{
 		message: "Cannot set both existing-chat-id and force-new-chat; choose one.",
@@ -52,8 +39,6 @@ export type ActionInputs = z.infer<typeof ActionInputsSchema>;
 // branch on this enum without parsing the human-readable message.
 export const ChatErrorKindSchema = z.enum([
 	"spend_exceeded",
-	"user_not_found",
-	"user_ambiguous",
 	"org_not_found",
 	"api_error",
 	"timeout",

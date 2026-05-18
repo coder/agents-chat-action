@@ -5,24 +5,8 @@ import { RealCoderClient } from "./coder-client";
 import { setActionOutputs, setFailureOutputs } from "./outputs";
 import { ActionInputsSchema } from "./schemas";
 
-// Convert the `github-user-id` workflow input to a number, or return
-// undefined when unset. Returns NaN for anything that isn't a plain
-// decimal integer literal so it fails schema parse instead of silently
-// resolving to the wrong Coder user. `Number()` alone is too permissive:
-// it accepts hex (`"0x1F"` -> 31), binary (`"0b101"` -> 5), octal
-// (`"0o7"` -> 7), and scientific notation (`"1e3"` -> 1000), all of
-// which would pass `z.number().int().positive()`. The bare regex gate
-// rejects every non-decimal form. See #16.
-export function parseGithubUserID(raw: string): number | undefined {
-	if (!raw) return undefined;
-	if (!/^\d+$/.test(raw)) return Number.NaN;
-	return Number(raw);
-}
-
 async function main() {
 	try {
-		const githubUserID = parseGithubUserID(core.getInput("github-user-id"));
-
 		const inputs = ActionInputsSchema.parse({
 			coderURL: core.getInput("coder-url", { required: true }),
 			coderToken: core.getInput("coder-token", { required: true }),
@@ -30,8 +14,6 @@ async function main() {
 			coderOrganization: core.getInput("coder-organization") || undefined,
 			githubURL: core.getInput("github-url", { required: true }),
 			githubToken: core.getInput("github-token", { required: true }),
-			githubUserID,
-			coderUsername: core.getInput("coder-username") || undefined,
 			workspaceId: core.getInput("workspace-id") || undefined,
 			modelConfigId: core.getInput("model-config-id") || undefined,
 			existingChatId: core.getInput("existing-chat-id") || undefined,
@@ -51,12 +33,7 @@ async function main() {
 
 		core.debug("Clients initialized");
 
-		const action = new CoderAgentChatAction(
-			coder,
-			octokit,
-			inputs,
-			github.context,
-		);
+		const action = new CoderAgentChatAction(coder, octokit, inputs);
 		const outputs = await action.run();
 
 		setActionOutputs(outputs);

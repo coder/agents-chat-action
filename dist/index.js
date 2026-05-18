@@ -2,7 +2,6 @@ var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
-var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 function __accessProp(key) {
   return this[key];
@@ -29,23 +28,6 @@ var __toESM = (mod, isNodeMode, target) => {
     cache.set(mod, to);
   return to;
 };
-var __toCommonJS = (from) => {
-  var entry = (__moduleCache ??= new WeakMap).get(from), desc;
-  if (entry)
-    return entry;
-  entry = __defProp({}, "__esModule", { value: true });
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (var key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(entry, key))
-        __defProp(entry, key, {
-          get: __accessProp.bind(from, key),
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
-        });
-  }
-  __moduleCache.set(from, entry);
-  return entry;
-};
-var __moduleCache;
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
 var __returnValue = (v) => v;
 function __exportSetter(name, newValue) {
@@ -19128,7 +19110,7 @@ var require_before_after_hook = __commonJS((exports2, module2) => {
 // node_modules/@octokit/endpoint/dist-node/index.js
 var require_dist_node2 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -19139,16 +19121,16 @@ var require_dist_node2 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var dist_src_exports = {};
   __export2(dist_src_exports, {
     endpoint: () => endpoint
   });
-  module2.exports = __toCommonJS2(dist_src_exports);
+  module2.exports = __toCommonJS(dist_src_exports);
   var import_universal_user_agent = require_dist_node();
   var VERSION = "9.0.6";
   var userAgent = `octokit-endpoint.js/${VERSION} ${(0, import_universal_user_agent.getUserAgent)()}`;
@@ -19542,7 +19524,7 @@ var require_once = __commonJS((exports2, module2) => {
 var require_dist_node4 = __commonJS((exports2, module2) => {
   var __create2 = Object.create;
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __getProtoOf2 = Object.getPrototypeOf;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
@@ -19554,17 +19536,17 @@ var require_dist_node4 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
     }
     return to;
   };
   var __toESM2 = (mod, isNodeMode, target) => (target = mod != null ? __create2(__getProtoOf2(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp2(target, "default", { value: mod, enumerable: true }) : target, mod));
-  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var dist_src_exports = {};
   __export2(dist_src_exports, {
     RequestError: () => RequestError
   });
-  module2.exports = __toCommonJS2(dist_src_exports);
+  module2.exports = __toCommonJS(dist_src_exports);
   var import_deprecation = require_dist_node3();
   var import_once = __toESM2(require_once());
   var logOnceCode = (0, import_once.default)((deprecation) => console.warn(deprecation));
@@ -19612,7 +19594,7 @@ var require_dist_node4 = __commonJS((exports2, module2) => {
 // node_modules/@octokit/request/dist-node/index.js
 var require_dist_node5 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -19623,16 +19605,16 @@ var require_dist_node5 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var dist_src_exports = {};
   __export2(dist_src_exports, {
     request: () => request
   });
-  module2.exports = __toCommonJS2(dist_src_exports);
+  module2.exports = __toCommonJS(dist_src_exports);
   var import_endpoint = require_dist_node2();
   var import_universal_user_agent = require_dist_node();
   var VERSION = "8.4.1";
@@ -19811,7 +19793,7 @@ var require_dist_node5 = __commonJS((exports2, module2) => {
 // node_modules/@octokit/graphql/dist-node/index.js
 var require_dist_node6 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -19822,18 +19804,18 @@ var require_dist_node6 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var index_exports = {};
   __export2(index_exports, {
     GraphqlResponseError: () => GraphqlResponseError,
     graphql: () => graphql2,
     withCustomRequest: () => withCustomRequest
   });
-  module2.exports = __toCommonJS2(index_exports);
+  module2.exports = __toCommonJS(index_exports);
   var import_request3 = require_dist_node5();
   var import_universal_user_agent = require_dist_node();
   var VERSION = "7.1.1";
@@ -19935,7 +19917,7 @@ var require_dist_node6 = __commonJS((exports2, module2) => {
 // node_modules/@octokit/auth-token/dist-node/index.js
 var require_dist_node7 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -19946,16 +19928,16 @@ var require_dist_node7 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var dist_src_exports = {};
   __export2(dist_src_exports, {
     createTokenAuth: () => createTokenAuth
   });
-  module2.exports = __toCommonJS2(dist_src_exports);
+  module2.exports = __toCommonJS(dist_src_exports);
   var REGEX_IS_INSTALLATION_LEGACY = /^v1\./;
   var REGEX_IS_INSTALLATION = /^ghs_/;
   var REGEX_IS_USER_TO_SERVER = /^ghu_/;
@@ -19998,7 +19980,7 @@ var require_dist_node7 = __commonJS((exports2, module2) => {
 // node_modules/@octokit/core/dist-node/index.js
 var require_dist_node8 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -20009,16 +19991,16 @@ var require_dist_node8 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var index_exports = {};
   __export2(index_exports, {
     Octokit: () => Octokit
   });
-  module2.exports = __toCommonJS2(index_exports);
+  module2.exports = __toCommonJS(index_exports);
   var import_universal_user_agent = require_dist_node();
   var import_before_after_hook = require_before_after_hook();
   var import_request = require_dist_node5();
@@ -20134,7 +20116,7 @@ var require_dist_node8 = __commonJS((exports2, module2) => {
 // node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js
 var require_dist_node9 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -20145,17 +20127,17 @@ var require_dist_node9 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var dist_src_exports = {};
   __export2(dist_src_exports, {
     legacyRestEndpointMethods: () => legacyRestEndpointMethods,
     restEndpointMethods: () => restEndpointMethods
   });
-  module2.exports = __toCommonJS2(dist_src_exports);
+  module2.exports = __toCommonJS(dist_src_exports);
   var VERSION = "10.4.1";
   var Endpoints = {
     actions: {
@@ -22271,7 +22253,7 @@ var require_dist_node9 = __commonJS((exports2, module2) => {
 // node_modules/@octokit/plugin-paginate-rest/dist-node/index.js
 var require_dist_node10 = __commonJS((exports2, module2) => {
   var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames2 = Object.getOwnPropertyNames;
   var __hasOwnProp2 = Object.prototype.hasOwnProperty;
   var __export2 = (target, all) => {
@@ -22282,11 +22264,11 @@ var require_dist_node10 = __commonJS((exports2, module2) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames2(from))
         if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
+          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
     }
     return to;
   };
-  var __toCommonJS2 = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
+  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
   var dist_src_exports = {};
   __export2(dist_src_exports, {
     composePaginateRest: () => composePaginateRest,
@@ -22294,7 +22276,7 @@ var require_dist_node10 = __commonJS((exports2, module2) => {
     paginateRest: () => paginateRest,
     paginatingEndpoints: () => paginatingEndpoints
   });
-  module2.exports = __toCommonJS2(dist_src_exports);
+  module2.exports = __toCommonJS(dist_src_exports);
   var VERSION = "9.2.2";
   function normalizePaginatedListResponse(response) {
     if (!response.data) {
@@ -22744,11 +22726,6 @@ var require_github = __commonJS((exports2) => {
 });
 
 // src/index.ts
-var exports_src = {};
-__export(exports_src, {
-  parseGithubUserID: () => parseGithubUserID
-});
-module.exports = __toCommonJS(exports_src);
 var core4 = __toESM(require_core(), 1);
 var github = __toESM(require_github(), 1);
 
@@ -26770,40 +26747,9 @@ class RealCoderClient {
     }
     return response.json();
   }
-  async getCoderUserByGitHubId(githubUserId) {
-    if (githubUserId === undefined) {
-      throw new CoderAPIError("GitHub user ID cannot be undefined", 400);
-    }
-    if (githubUserId === 0) {
-      throw new CoderAPIError("GitHub user ID cannot be 0", 400);
-    }
-    const filter = `github_com_user_id:${githubUserId}`;
-    const endpoint = `/api/v2/users?q=${encodeURIComponent(filter)}`;
-    const response = await this.request(endpoint);
-    const userList = CoderSDKGetUsersResponseSchema.parse(response);
-    const liveUsers = userList.users.filter((u) => !u.deleted);
-    if (liveUsers.length === 0) {
-      throw new CoderAPIError(`No Coder user found with GitHub user ID ${githubUserId}`, 404, undefined, "user_not_found");
-    }
-    if (liveUsers.length > 1) {
-      throw new CoderAPIError(`Multiple Coder users found with GitHub user ID ${githubUserId}`, 409, undefined, "user_ambiguous");
-    }
-    return CoderSDKUserSchema.parse(liveUsers[0]);
-  }
-  async getCoderUserByUsername(username) {
-    if (!username) {
-      throw new CoderAPIError("Coder username cannot be empty", 400);
-    }
-    const endpoint = `/api/v2/users/${encodeURIComponent(username)}`;
-    try {
-      const response = await this.request(endpoint);
-      return CoderSDKUserSchema.parse(response);
-    } catch (err) {
-      if (err instanceof CoderAPIError && err.statusCode === 404) {
-        throw new CoderAPIError(`No Coder user found with username "${username}"`, 404, err.response, "user_not_found");
-      }
-      throw err;
-    }
+  async getAuthenticatedUser() {
+    const response = await this.request("/api/v2/users/me");
+    return CoderSDKUserSchema.parse(response);
   }
   async getOrganizationByName(name) {
     if (!name) {
@@ -26860,9 +26806,6 @@ var CoderSDKUserSchema = exports_external.object({
   organization_ids: exports_external.array(exports_external.string().uuid()),
   github_com_user_id: exports_external.number().optional(),
   deleted: exports_external.boolean().optional()
-});
-var CoderSDKGetUsersResponseSchema = exports_external.object({
-  users: exports_external.array(CoderSDKUserSchema)
 });
 var CoderOrganizationSchema = exports_external.object({
   id: exports_external.string().uuid(),
@@ -26932,37 +26875,26 @@ var CreateChatMessageRequestSchema = exports_external.object({
 var CreateChatMessageResponseSchema = exports_external.object({
   queued: exports_external.boolean()
 });
-var ChatErrorKindSchema = exports_external.enum([
-  "user_not_found",
-  "user_ambiguous",
-  "org_not_found",
-  "spend_exceeded",
-  "api_error",
-  "timeout"
-]);
 
 class CoderAPIError extends Error {
   statusCode;
   response;
-  kind;
-  constructor(message, statusCode, response, kind) {
+  constructor(message, statusCode, response) {
     super(message);
     this.statusCode = statusCode;
     this.response = response;
-    this.kind = kind;
     this.name = "CoderAPIError";
   }
 }
 
-// src/sanitize-label-key.ts
+// src/sanitize-label-token.ts
 var ACTION_LABEL_KEYS = {
   marker: "coder-agents-chat-action",
   target: "gh-target",
-  user: "coder-agents-chat-action-user",
-  workflow: "coder-agents-chat-action-workflow"
+  workflow: "coder-agents-chat-action-workflow",
+  idempotency: "coder-agents-chat-action-idempotency"
 };
-var RESERVED_LABEL_KEYS = new Set(Object.values(ACTION_LABEL_KEYS));
-function sanitizeLabelKey(input) {
+function sanitizeLabelToken(input) {
   const lowered = input.toLowerCase();
   const replaced = lowered.replace(/[^a-z0-9._/-]/g, "-");
   const trimmed = replaced.replace(/^[^a-z0-9]+/, "");
@@ -26972,7 +26904,21 @@ function sanitizeLabelKey(input) {
 
 // src/comment.ts
 var core = __toESM(require_core(), 1);
-var GITHUB_URL_REGEX = /([^/]+)\/([^/]+)\/(?:issues|pull)\/(\d+)\/?(?:[?#].*)?$/;
+var GITHUB_URL_REGEX = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:issues|pull)\/(\d+)\/?(?:[?#].*)?$/;
+function parseGithubItemURL(input) {
+  if (!input) {
+    return;
+  }
+  const match = input.match(GITHUB_URL_REGEX);
+  if (!match) {
+    return;
+  }
+  return {
+    owner: match[1],
+    repo: match[2],
+    number: Number.parseInt(match[3], 10)
+  };
+}
 var COMMENT_MARKER_PREFIX = "<!-- coder-agents-chat-action:";
 var COMMENT_MARKER_SUFFIX = " -->";
 function buildCommentMarker(key) {
@@ -26980,14 +26926,14 @@ function buildCommentMarker(key) {
 }
 function deriveCommentKey(inputs) {
   if (inputs.idempotencyKey) {
-    return sanitizeLabelKey(inputs.idempotencyKey);
+    return sanitizeLabelToken(inputs.idempotencyKey);
   }
-  const match = inputs.githubURL.match(GITHUB_URL_REGEX);
+  const parsed = parseGithubItemURL(inputs.githubURL);
   let base;
-  if (!match) {
+  if (!parsed) {
     base = inputs.githubURL;
   } else {
-    base = `${match[1]}/${match[2]}#${match[3]}`;
+    base = `${parsed.owner}/${parsed.repo}#${parsed.number}`;
   }
   if (inputs.workflow) {
     return `${base}:${inputs.workflow}`;
@@ -26996,10 +26942,6 @@ function deriveCommentKey(inputs) {
 }
 function classifyError(err) {
   if (err instanceof CoderAPIError) {
-    const code = mapErrorCodeToKind(err.kind);
-    if (code) {
-      return { kind: code, message: err.message };
-    }
     const spend = parseSpendExceededBody(err.response);
     if (err.statusCode === 409 && spend) {
       return {
@@ -27019,15 +26961,6 @@ function classifyError(err) {
     return { kind: "api_error", message: err.message };
   }
   return { kind: "api_error", message: String(err) };
-}
-function mapErrorCodeToKind(code) {
-  switch (code) {
-    case "user_not_found":
-    case "user_ambiguous":
-      return code;
-    default:
-      return;
-  }
 }
 function parseSpendExceededBody(response) {
   const obj = parseJSONObject(response);
@@ -27072,11 +27005,21 @@ function formatMicrosAsDollars(micros) {
   const dollars = micros / 1e6;
   return `$${dollars.toFixed(2)}`;
 }
+var DETAIL_BLOCK_MAX_CHARS = 4000;
+function renderDetailBlock(message) {
+  const stripped = message.replace(/[\x00-\x08\x0B-\x1F\x7F]/g, "");
+  const capped = stripped.length > DETAIL_BLOCK_MAX_CHARS ? stripped.slice(0, DETAIL_BLOCK_MAX_CHARS) : stripped;
+  const safe = capped.replace(/`{4,}/g, "```");
+  return `- Detail:
+\`\`\`\`
+${safe}
+\`\`\`\``;
+}
 function buildFailureCommentBody(detail, ctx) {
   const runPhase = isRunPhaseFailure(detail.kind, ctx);
   const heading = runPhase ? "**Coder Agents Chat: failed**" : "**Coder Agents Chat: failed to start**";
   const lines = [heading, ""];
-  const linkLine = ctx.chatUrl ? `View the chat in the Coder deployment: ${ctx.chatUrl}` : `View chats in the Coder deployment: ${ctx.chatsUrl}`;
+  const linkLine = ctx.chatUrl ? `View the chat in the Coder deployment: ${ctx.chatUrl}` : `View agents in the Coder deployment: ${ctx.agentsUrl}`;
   switch (detail.kind) {
     case "spend_exceeded":
       lines.push("The Coder deployment's chat spend limit was reached, so this " + "chat could not be created.", "", `- chat-error-kind=${detail.kind}`, `- Spent: ${formatMicrosAsDollars(detail.spentMicros)}`, `- Limit: ${formatMicrosAsDollars(detail.limitMicros)}`);
@@ -27085,25 +27028,19 @@ function buildFailureCommentBody(detail, ctx) {
       }
       lines.push("", linkLine);
       break;
-    case "user_not_found":
-      lines.push("No Coder user could be resolved for this run. Adjust either " + "the `github-user-id` input (the GitHub identity is not linked " + "to a Coder user) or pass `coder-username` directly.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", linkLine);
-      break;
-    case "user_ambiguous":
-      lines.push("Multiple Coder users matched the GitHub identity. Set the " + "`coder-username` input to the specific account this workflow " + "should run as.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", linkLine);
-      break;
     case "org_not_found":
-      lines.push("The resolved Coder user has no matching organization. Set the " + "`coder-organization` input or grant the user a membership.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", linkLine);
+      lines.push("The Coder user has no matching organization. Set the " + "`coder-organization` input or grant the user a membership.", "", `- chat-error-kind=${detail.kind}`, renderDetailBlock(detail.message), "", linkLine);
       break;
     case "api_error":
       lines.push(apiErrorPhrase(runPhase, ctx), "");
-      lines.push(`- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`);
+      lines.push(`- chat-error-kind=${detail.kind}`, renderDetailBlock(detail.message));
       if (ctx.chatStatus === "error") {
         lines.push("- Hint: the agent itself failed mid-run; inspect " + "`last_error` on the chat (e.g. provider rate limits) " + "rather than action connectivity.");
       }
       lines.push("", linkLine);
       break;
     case "timeout":
-      lines.push("`wait: complete` polling did not reach a terminal status within " + "`wait-timeout-seconds`.", "", `- chat-error-kind=${detail.kind}`, `- Detail: ${detail.message}`, "", linkLine);
+      lines.push("`wait: complete` polling did not reach a terminal status within " + "`wait-timeout-seconds`.", "", `- chat-error-kind=${detail.kind}`, renderDetailBlock(detail.message), "", linkLine);
       break;
     default: {
       const _exhaustive = detail;
@@ -27226,8 +27163,8 @@ async function upsertCommentByMarker(args) {
     logLabel: "failure comment"
   });
 }
-function buildDeploymentChatsUrl(coderURL) {
-  return `${normalizeBaseUrl(coderURL)}/chats`;
+function buildDeploymentAgentsUrl(coderURL) {
+  return `${normalizeBaseUrl(coderURL)}/agents`;
 }
 
 // src/action.ts
@@ -27257,90 +27194,34 @@ class ActionFailureError extends Error {
   coderUsername;
   chatUrl;
 }
-function describeError(err) {
-  if (err instanceof Error) {
-    return err.message;
-  }
-  if (typeof err === "string") {
-    return err;
-  }
-  try {
-    return JSON.stringify(err);
-  } catch {
-    return String(err);
-  }
-}
-var TRUSTED_AUTHOR_ASSOCIATIONS = new Set([
-  "OWNER",
-  "MEMBER",
-  "COLLABORATOR"
-]);
-function classifyAutoResolveTrust(context) {
-  const pr = context.payload.pull_request;
-  if (pr) {
-    const headRepo = pr.head?.repo;
-    const baseRepo = pr.base?.repo;
-    const headFullName = headRepo?.full_name;
-    const baseFullName = baseRepo?.full_name;
-    const isFork = headRepo === null || headRepo?.fork === true || typeof headFullName === "string" && typeof baseFullName === "string" && headFullName !== baseFullName;
-    if (isFork) {
-      return {
-        kind: "untrusted",
-        reason: "the pull request is from a fork; auto-resolve refuses to bind " + "the workflow's Coder identity to a fork-PR author"
-      };
-    }
-  }
-  const associations = [
-    { source: "comment", value: context.payload.comment?.author_association },
-    { source: "review", value: context.payload.review?.author_association }
-  ];
-  for (const { source, value } of associations) {
-    if (typeof value !== "string" || value.length === 0) {
-      continue;
-    }
-    if (TRUSTED_AUTHOR_ASSOCIATIONS.has(value)) {
-      return {
-        kind: "trusted",
-        reason: `${source}.author_association is ${value}`
-      };
-    }
-    return {
-      kind: "untrusted",
-      reason: `${source}.author_association is ${value}, which lacks ` + "repository write access"
-    };
-  }
-  return { kind: "no-signal" };
-}
 
 class CoderAgentChatAction {
   coder;
   octokit;
   inputs;
-  context;
   clock;
-  constructor(coder, octokit, inputs, context, clock = defaultClock) {
+  constructor(coder, octokit, inputs, clock = defaultClock) {
     this.coder = coder;
     this.octokit = octokit;
     this.inputs = inputs;
-    this.context = context;
     this.clock = clock;
   }
   parseGithubURL() {
     if (!this.inputs.githubURL) {
       throw new Error("Missing GitHub URL");
     }
-    const match = this.inputs.githubURL.match(GITHUB_URL_REGEX);
-    if (!match) {
-      throw new Error(`Invalid GitHub URL: ${this.inputs.githubURL}`);
+    const parsed = parseGithubItemURL(this.inputs.githubURL);
+    if (!parsed) {
+      throw new Error(`Invalid \`github-url\` input "${this.inputs.githubURL}". ` + "Expected `https://github.com/<owner>/<repo>/issues/<n>` or " + "`https://github.com/<owner>/<repo>/pull/<n>`. The action " + "rejects non-github.com hosts so a workflow that templates " + "user-controlled content into this input cannot redirect the " + "action to an attacker-chosen repository.");
     }
     return {
-      githubOrg: match[1],
-      githubRepo: match[2],
-      githubIssueNumber: parseInt(match[3], 10)
+      githubOrg: parsed.owner,
+      githubRepo: parsed.repo,
+      githubIssueNumber: parsed.number
     };
   }
   generateChatUrl(chatId) {
-    return `${normalizeBaseUrl(this.inputs.coderURL)}/chats/${chatId}`;
+    return `${normalizeBaseUrl(this.inputs.coderURL)}/agents/${chatId}`;
   }
   async commentOnIssue(args) {
     const workflow = process.env.GITHUB_WORKFLOW || undefined;
@@ -27367,7 +27248,6 @@ class CoderAgentChatAction {
       marker
     });
   }
-  warnUnwiredInputs() {}
   buildOutputs(coderUsername, chat, chatCreated) {
     const diff = chat.diff_status;
     const hasPR = diff?.pr_number != null;
@@ -27463,67 +27343,7 @@ class CoderAgentChatAction {
       throw err;
     }
   }
-  async resolveCoderUsername() {
-    if (this.inputs.coderUsername) {
-      core2.info(`Using provided Coder username: ${this.inputs.coderUsername}`);
-      let coderUser;
-      try {
-        coderUser = await this.coder.getCoderUserByUsername(this.inputs.coderUsername);
-      } catch (err) {
-        if (err instanceof CoderAPIError && err.statusCode === 404) {
-          throw new ActionFailureError("user_not_found", `Coder user '${this.inputs.coderUsername}' not found. ` + "Check the `coder-username` input value.", undefined, { cause: err });
-        }
-        throw err;
-      }
-      return { username: coderUser.username, user: coderUser };
-    }
-    if (this.inputs.githubUserID !== undefined) {
-      core2.info(`Looking up Coder user by GitHub user ID: ${this.inputs.githubUserID}`);
-      const coderUser = await this.coder.getCoderUserByGitHubId(this.inputs.githubUserID);
-      return { username: coderUser.username, user: coderUser };
-    }
-    if (this.context.eventName === "schedule") {
-      throw new Error("Cannot auto-resolve a GitHub identity for `schedule` events: " + "`github.context.actor` for cron-triggered runs is the workflow " + "file's last editor, not the triggering user. " + "Set the `coder-username` input to a Coder username, or set " + "`github-user-id` to the GitHub numeric user id of the user the " + "chat should run as.");
-    }
-    const trust = classifyAutoResolveTrust(this.context);
-    if (trust.kind === "untrusted") {
-      throw new Error("Refusing to auto-resolve a GitHub identity: " + `${trust.reason}. ` + "Set the `coder-username` input to a Coder username, or set " + "`github-user-id` to the GitHub numeric user id of the user " + "the chat should run as.");
-    }
-    if (trust.kind === "trusted") {
-      core2.info(`Auto-resolve trust check passed: ${trust.reason}`);
-    }
-    const senderId = this.context.payload?.sender?.id;
-    if (typeof senderId === "number" && Number.isInteger(senderId) && senderId > 0) {
-      core2.info(`Auto-resolving Coder user from github.context.payload.sender.id: ${senderId}`);
-      try {
-        const coderUser = await this.coder.getCoderUserByGitHubId(senderId);
-        return { username: coderUser.username, user: coderUser };
-      } catch (err) {
-        throw new Error(`Failed to resolve Coder user from github.context.payload.sender.id (${senderId}): ${describeError(err)}. ` + "Set the `coder-username` input to bypass auto-resolution.");
-      }
-    }
-    const actor = this.context.actor;
-    if (actor) {
-      core2.info(`Auto-resolving Coder user from github.context.actor: ${actor}`);
-      let actorId;
-      try {
-        const { data } = await this.octokit.rest.users.getByUsername({
-          username: actor
-        });
-        actorId = data.id;
-      } catch (err) {
-        throw new Error(`Failed to resolve GitHub user id for github.context.actor (${actor}): ${describeError(err)}. ` + "Set the `coder-username` input to bypass auto-resolution.");
-      }
-      try {
-        const coderUser = await this.coder.getCoderUserByGitHubId(actorId);
-        return { username: coderUser.username, user: coderUser };
-      } catch (err) {
-        throw new Error(`Failed to resolve Coder user for github.context.actor (${actor}, GitHub user id ${actorId}): ${describeError(err)}. ` + "Set the `coder-username` input to bypass auto-resolution.");
-      }
-    }
-    throw new Error("Could not auto-resolve a GitHub identity from the workflow context. " + "Set the `coder-username` input to a Coder username, or set " + "`github-user-id` to the GitHub numeric user id of the user the " + "chat should run as.");
-  }
-  async resolveOrganizationID(coderUsername, resolvedUser) {
+  async resolveOrganizationID(user) {
     if (this.inputs.coderOrganization) {
       core2.info(`Resolving Coder organization by name: ${this.inputs.coderOrganization}`);
       try {
@@ -27532,19 +27352,6 @@ class CoderAgentChatAction {
       } catch (err) {
         if (err instanceof CoderAPIError && err.statusCode === 404) {
           throw new ActionFailureError("org_not_found", `Coder organization '${this.inputs.coderOrganization}' not found. ` + "Check the `coder-organization` input value.", undefined, { cause: err });
-        }
-        throw err;
-      }
-    }
-    let user;
-    if (resolvedUser) {
-      user = resolvedUser;
-    } else {
-      try {
-        user = await this.coder.getCoderUserByUsername(coderUsername);
-      } catch (err) {
-        if (err instanceof CoderAPIError && err.statusCode === 404) {
-          throw new ActionFailureError("user_not_found", `Coder user '${coderUsername}' not found. ` + "Check the `coder-username` input value.", undefined, { cause: err });
         }
         throw err;
       }
@@ -27574,7 +27381,7 @@ class CoderAgentChatAction {
     }
   }
   async handleFailure(error3) {
-    const detail = classifyError(error3);
+    const detail = error3 instanceof ActionFailureError && error3.kind !== "spend_exceeded" ? { kind: error3.kind, message: error3.message } : classifyError(error3);
     const failure = error3 instanceof ActionFailureError ? error3 : new ActionFailureError(detail.kind, detail.message, undefined, {
       cause: error3
     });
@@ -27591,7 +27398,7 @@ class CoderAgentChatAction {
     const workflow = process.env.GITHUB_WORKFLOW || undefined;
     const marker = buildCommentMarker(deriveCommentKey({ ...this.inputs, workflow }));
     const body = buildFailureCommentBody(detail, {
-      chatsUrl: buildDeploymentChatsUrl(this.inputs.coderURL),
+      agentsUrl: buildDeploymentAgentsUrl(this.inputs.coderURL),
       marker,
       chatUrl: failure.chatUrl,
       chatStatus: failure.chat?.status
@@ -27607,13 +27414,13 @@ class CoderAgentChatAction {
     return failure;
   }
   async runInner() {
-    this.warnUnwiredInputs();
-    const { username: coderUsername, user: resolvedUser } = await this.resolveCoderUsername();
     const { githubOrg, githubRepo, githubIssueNumber } = this.parseGithubURL();
     core2.info(`GitHub owner: ${githubOrg}`);
     core2.info(`GitHub repo: ${githubRepo}`);
     core2.info(`GitHub item number: ${githubIssueNumber}`);
-    core2.info(`Coder username: ${coderUsername}`);
+    const tokenOwner = await this.coder.getAuthenticatedUser();
+    const coderUsername = tokenOwner.username;
+    core2.info(`Resolved Coder user from \`coder-token\` (users/me): ${coderUsername}`);
     if (this.inputs.existingChatId) {
       core2.info(`Sending message to existing chat: ${this.inputs.existingChatId}`);
       const chatId = ChatIdSchema.parse(this.inputs.existingChatId);
@@ -27626,16 +27433,13 @@ class CoderAgentChatAction {
         githubIssueNumber
       });
     }
-    const sanitizedKey = this.inputs.idempotencyKey ? sanitizeLabelKey(this.inputs.idempotencyKey) : undefined;
-    if (sanitizedKey && RESERVED_LABEL_KEYS.has(sanitizedKey)) {
-      throw new Error(`idempotency-key sanitizes to a reserved chat-label key ("${sanitizedKey}"). ` + `Reserved keys: ${[...RESERVED_LABEL_KEYS].join(", ")}. ` + "Choose a different idempotency-key value.");
-    }
+    const sanitizedIdempotency = this.inputs.idempotencyKey ? sanitizeLabelToken(this.inputs.idempotencyKey) : undefined;
     const ghTarget = `${githubOrg}/${githubRepo}#${githubIssueNumber}`;
     const workflow = process.env.GITHUB_WORKFLOW || undefined;
     if (this.inputs.forceNewChat) {
       core2.info("force-new-chat=true: skipping chat-reuse lookup");
     } else {
-      const follow = await this.findReuseMatch(ghTarget, resolvedUser.id, workflow, sanitizedKey);
+      const follow = await this.findReuseMatch(ghTarget, workflow, sanitizedIdempotency);
       if (follow) {
         core2.info(`Reusing existing chat: ${follow.id}`);
         return this.runFollowUp({
@@ -27649,13 +27453,13 @@ class CoderAgentChatAction {
       }
     }
     core2.info("Creating new agents chat...");
-    const organizationID = await this.resolveOrganizationID(coderUsername, resolvedUser);
+    const organizationID = await this.resolveOrganizationID(tokenOwner);
     const req = {
       organization_id: organizationID,
       content: [{ type: "text", text: this.inputs.chatPrompt }],
       workspace_id: this.inputs.workspaceId,
       model_config_id: this.inputs.modelConfigId,
-      labels: this.buildChatLabels(ghTarget, resolvedUser.id, workflow, sanitizedKey)
+      labels: this.buildChatLabels(ghTarget, workflow, sanitizedIdempotency)
     };
     const createdChat = await this.coder.createChat(req);
     core2.info(`Agents chat created successfully (id: ${createdChat.id}, status: ${createdChat.status})`);
@@ -27736,17 +27540,16 @@ class CoderAgentChatAction {
       chatCreated: false
     };
   }
-  async findReuseMatch(ghTarget, coderUserId, workflow, sanitizedKey) {
+  async findReuseMatch(ghTarget, workflow, sanitizedIdempotency) {
     const labels = [
       `${ACTION_LABEL_KEYS.marker}:true`,
-      `${ACTION_LABEL_KEYS.target}:${ghTarget}`,
-      `${ACTION_LABEL_KEYS.user}:${coderUserId}`
+      `${ACTION_LABEL_KEYS.target}:${ghTarget}`
     ];
     if (workflow) {
       labels.push(`${ACTION_LABEL_KEYS.workflow}:${workflow}`);
     }
-    if (sanitizedKey) {
-      labels.push(`${sanitizedKey}:true`);
+    if (sanitizedIdempotency) {
+      labels.push(`${ACTION_LABEL_KEYS.idempotency}:${sanitizedIdempotency}`);
     }
     let chats;
     try {
@@ -27775,20 +27578,16 @@ class CoderAgentChatAction {
     }
     return live[0];
   }
-  buildChatLabels(ghTarget, coderUserId, workflow, sanitizedKey) {
-    if (sanitizedKey && RESERVED_LABEL_KEYS.has(sanitizedKey)) {
-      throw new Error(`idempotency-key sanitizes to a reserved chat-label key ("${sanitizedKey}"). ` + `Reserved keys: ${[...RESERVED_LABEL_KEYS].join(", ")}. ` + "Choose a different idempotency-key value.");
-    }
+  buildChatLabels(ghTarget, workflow, sanitizedIdempotency) {
     const labels = {
       [ACTION_LABEL_KEYS.marker]: "true",
-      [ACTION_LABEL_KEYS.target]: ghTarget,
-      [ACTION_LABEL_KEYS.user]: coderUserId
+      [ACTION_LABEL_KEYS.target]: ghTarget
     };
     if (workflow) {
       labels[ACTION_LABEL_KEYS.workflow] = workflow;
     }
-    if (sanitizedKey) {
-      labels[sanitizedKey] = "true";
+    if (sanitizedIdempotency) {
+      labels[ACTION_LABEL_KEYS.idempotency] = sanitizedIdempotency;
     }
     return labels;
   }
@@ -27852,8 +27651,6 @@ var ActionInputsObjectSchema = exports_external.object({
   coderOrganization: exports_external.string().min(1).optional(),
   githubURL: exports_external.string().url(),
   githubToken: exports_external.string().min(1),
-  githubUserID: exports_external.number().int().positive().optional(),
-  coderUsername: exports_external.string().min(1).optional(),
   workspaceId: exports_external.string().uuid().optional(),
   modelConfigId: exports_external.string().uuid().optional(),
   existingChatId: exports_external.string().uuid().optional(),
@@ -27863,17 +27660,12 @@ var ActionInputsObjectSchema = exports_external.object({
   idempotencyKey: exports_external.string().min(1).optional(),
   forceNewChat: exports_external.boolean().default(false)
 });
-var ActionInputsSchema = ActionInputsObjectSchema.refine((data) => !(data.githubUserID !== undefined && data.coderUsername !== undefined), {
-  message: "Cannot set both github-user-id and coder-username; choose one.",
-  path: ["coderUsername"]
-}).refine((data) => !(data.existingChatId !== undefined && data.forceNewChat === true), {
+var ActionInputsSchema = ActionInputsObjectSchema.refine((data) => !(data.existingChatId !== undefined && data.forceNewChat === true), {
   message: "Cannot set both existing-chat-id and force-new-chat; choose one.",
   path: ["forceNewChat"]
 });
-var ChatErrorKindSchema2 = exports_external.enum([
+var ChatErrorKindSchema = exports_external.enum([
   "spend_exceeded",
-  "user_not_found",
-  "user_ambiguous",
   "org_not_found",
   "api_error",
   "timeout"
@@ -27895,21 +27687,13 @@ var ActionOutputsSchema = exports_external.object({
   changedFiles: exports_external.number().optional(),
   headBranch: exports_external.string().optional(),
   baseBranch: exports_external.string().optional(),
-  chatErrorKind: ChatErrorKindSchema2.optional(),
+  chatErrorKind: ChatErrorKindSchema.optional(),
   chatErrorMessage: exports_external.string().optional()
 });
 
 // src/index.ts
-function parseGithubUserID(raw) {
-  if (!raw)
-    return;
-  if (!/^\d+$/.test(raw))
-    return Number.NaN;
-  return Number(raw);
-}
 async function main() {
   try {
-    const githubUserID = parseGithubUserID(core4.getInput("github-user-id"));
     const inputs = ActionInputsSchema.parse({
       coderURL: core4.getInput("coder-url", { required: true }),
       coderToken: core4.getInput("coder-token", { required: true }),
@@ -27917,8 +27701,6 @@ async function main() {
       coderOrganization: core4.getInput("coder-organization") || undefined,
       githubURL: core4.getInput("github-url", { required: true }),
       githubToken: core4.getInput("github-token", { required: true }),
-      githubUserID,
-      coderUsername: core4.getInput("coder-username") || undefined,
       workspaceId: core4.getInput("workspace-id") || undefined,
       modelConfigId: core4.getInput("model-config-id") || undefined,
       existingChatId: core4.getInput("existing-chat-id") || undefined,
@@ -27934,7 +27716,7 @@ async function main() {
     const coder = new RealCoderClient(inputs.coderURL, inputs.coderToken);
     const octokit = github.getOctokit(inputs.githubToken);
     core4.debug("Clients initialized");
-    const action = new CoderAgentChatAction(coder, octokit, inputs, github.context);
+    const action = new CoderAgentChatAction(coder, octokit, inputs);
     const outputs = await action.run();
     setActionOutputs(outputs);
     core4.debug("Action completed successfully");

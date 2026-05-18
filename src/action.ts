@@ -9,21 +9,17 @@ import type {
 	CoderSDKUser,
 	CreateChatRequest,
 } from "./coder-client";
-import {
-	ACTION_LABEL_KEYS,
-	RESERVED_LABEL_KEYS,
-	sanitizeLabelKey,
-} from "./sanitize-label-key";
+import { ACTION_LABEL_KEYS, sanitizeLabelToken } from "./sanitize-label-token";
 import {
 	buildCommentMarker,
-	buildDeploymentChatsUrl,
+	buildDeploymentAgentsUrl,
 	buildFailureCommentBody,
 	buildSuccessCommentBody,
 	classifyError,
 	deriveCommentKey,
 	type FailureDetail,
-	GITHUB_URL_REGEX,
 	normalizeBaseUrl,
+	parseGithubItemURL,
 	upsertCommentByMarker,
 } from "./comment";
 import type { ActionInputs, ActionOutputs, ChatErrorKind } from "./schemas";
@@ -95,202 +91,11 @@ export class ActionFailureError extends Error {
 	chatUrl?: string;
 }
 
-/**
- * Stringify an unknown thrown value for a wrapping error message. Library
- * code may throw `Error`s, bare strings, or arbitrary values.
- */
-function describeError(err: unknown): string {
-	if (err instanceof Error) {
-		return err.message;
-	}
-	if (typeof err === "string") {
-		return err;
-	}
-	try {
-		return JSON.stringify(err);
-	} catch {
-		return String(err);
-	}
-}
-
-/**
- * GitHub `author_association` values that map to repository write access in
- * the action's auto-resolve trust model. `OWNER` and `MEMBER` cover org
- * and personal-repo owners; `COLLABORATOR` covers invited collaborators.
- * Any other association (including `CONTRIBUTOR`, `FIRST_TIMER`,
- * `FIRST_TIME_CONTRIBUTOR`, `MANNEQUIN`, `NONE`) is treated as untrusted.
- *
- * See: https://docs.github.com/en/graphql/reference/enums#commentauthorassociation
- */
-const TRUSTED_AUTHOR_ASSOCIATIONS = new Set([
-	"OWNER",
-	"MEMBER",
-	"COLLABORATOR",
-]);
-
-/**
- * Structural subset of `@actions/github`'s `Context` covering the fields the
- * action reads. Production callers pass `github.context`; tests build
- * fixtures via `createMockContext`.
- *
- * The auto-resolve trust gate (`classifyAutoResolveTrust`) reads
- * `pull_request.head.repo` / `pull_request.base.repo` for fork detection,
- * and `comment.author_association` / `review.author_association` as the
- * sender-reliable trust signals. `issue.author_association` and
- * `pull_request.author_association` are typed on the payload for
- * completeness but the gate deliberately does not read them (they
- * describe the resource opener, not the event sender). Fields are
- * typed loosely because the full webhook schemas are large and
- * event-specific.
- */
-export interface ActionContext {
-	eventName: string;
-	actor: string;
-	payload: {
-		sender?: {
-			id?: number;
-			[key: string]: unknown;
-		};
-		pull_request?: {
-			author_association?: string;
-			head?: {
-				repo?: {
-					fork?: boolean;
-					full_name?: string;
-					[key: string]: unknown;
-				} | null;
-				[key: string]: unknown;
-			};
-			base?: {
-				repo?: {
-					full_name?: string;
-					[key: string]: unknown;
-				} | null;
-				[key: string]: unknown;
-			};
-			[key: string]: unknown;
-		};
-		issue?: {
-			author_association?: string;
-			[key: string]: unknown;
-		};
-		comment?: {
-			author_association?: string;
-			[key: string]: unknown;
-		};
-		review?: {
-			author_association?: string;
-			[key: string]: unknown;
-		};
-		[key: string]: unknown;
-	};
-}
-
-/**
- * Outcome of the auto-resolve trust gate. `trusted` means the gate found a
- * repository-write-level signal and auto-resolve may proceed. `untrusted`
- * means the gate found a signal that fails the bar (fork PR, low-trust
- * association) and auto-resolve must refuse. `no-signal` means the
- * payload carried nothing the gate can act on, so the gate defers to
- * GitHub's underlying event-permission model (secret access, branch
- * protection, etc.).
- */
-type TrustClassification =
-	| { kind: "trusted"; reason: string }
-	| { kind: "untrusted"; reason: string }
-	| { kind: "no-signal" };
-
-/**
- * Classify whether the triggering identity from `context` is trusted for
- * auto-resolve.
- *
- * Two layers of signal, applied in order:
- *
- * 1. Fork pull requests always refuse. An attacker who opens a PR from a
- *    fork must not be able to bind the workflow's Coder token to their
- *    own Coder identity (if they happen to have one) and execute
- *    attacker-controlled prompts. A `null` `head.repo` (deleted fork) is
- *    also treated as a fork: the only way `head.repo` becomes null is
- *    when the fork's source repository was deleted, which collapses the
- *    same-repo check below into a false negative.
- *
- * 2. `author_association` on `comment` or `review`, in that order. These
- *    are the only fields where the association describes the event
- *    *sender* rather than the resource *author*. On `issue_comment`,
- *    `comment.user` is the sender; on `pull_request_review`,
- *    `review.user` is the sender. By contrast, `issue.author_association`
- *    and `pull_request.author_association` describe the resource opener,
- *    not the labeler / assigner / reviewer who actually triggered the
- *    event. Reading them would refuse a trusted MEMBER labeling an
- *    issue opened by a NONE user.
- *
- * Returning `no-signal` is deliberate: events like `issues`,
- * `pull_request` (same-repo), `workflow_dispatch`, `push`, and
- * `repository_dispatch` carry no sender-association data the gate can
- * trust, and the underlying GitHub permission model already gates who
- * can trigger them. The trust gate is layered on top of, not in place
- * of, those controls.
- */
-function classifyAutoResolveTrust(context: ActionContext): TrustClassification {
-	const pr = context.payload.pull_request;
-	if (pr) {
-		const headRepo = pr.head?.repo;
-		const baseRepo = pr.base?.repo;
-		const headFullName = headRepo?.full_name;
-		const baseFullName = baseRepo?.full_name;
-		const isFork =
-			headRepo === null ||
-			headRepo?.fork === true ||
-			(typeof headFullName === "string" &&
-				typeof baseFullName === "string" &&
-				headFullName !== baseFullName);
-		if (isFork) {
-			return {
-				kind: "untrusted",
-				reason:
-					"the pull request is from a fork; auto-resolve refuses to bind " +
-					"the workflow's Coder identity to a fork-PR author",
-			};
-		}
-	}
-
-	// Only read `author_association` from `comment` and `review`: those
-	// are the only payload fields where the association describes the
-	// event sender rather than the resource author. `issue` and
-	// `pull_request` `author_association` describe the opener, which is
-	// frequently NOT the sender (a MEMBER labeling an issue, an assignee
-	// receiving an assignment, etc.).
-	const associations: Array<{ source: string; value: unknown }> = [
-		{ source: "comment", value: context.payload.comment?.author_association },
-		{ source: "review", value: context.payload.review?.author_association },
-	];
-	for (const { source, value } of associations) {
-		if (typeof value !== "string" || value.length === 0) {
-			continue;
-		}
-		if (TRUSTED_AUTHOR_ASSOCIATIONS.has(value)) {
-			return {
-				kind: "trusted",
-				reason: `${source}.author_association is ${value}`,
-			};
-		}
-		return {
-			kind: "untrusted",
-			reason:
-				`${source}.author_association is ${value}, which lacks ` +
-				"repository write access",
-		};
-	}
-
-	return { kind: "no-signal" };
-}
-
 export class CoderAgentChatAction {
 	constructor(
 		private readonly coder: CoderClient,
 		private readonly octokit: Octokit,
 		private readonly inputs: ActionInputs,
-		private readonly context: ActionContext,
 		private readonly clock: Clock = defaultClock,
 	) {}
 
@@ -307,14 +112,21 @@ export class CoderAgentChatAction {
 			throw new Error("Missing GitHub URL");
 		}
 
-		const match = this.inputs.githubURL.match(GITHUB_URL_REGEX);
-		if (!match) {
-			throw new Error(`Invalid GitHub URL: ${this.inputs.githubURL}`);
+		const parsed = parseGithubItemURL(this.inputs.githubURL);
+		if (!parsed) {
+			throw new Error(
+				`Invalid \`github-url\` input "${this.inputs.githubURL}". ` +
+					"Expected `https://github.com/<owner>/<repo>/issues/<n>` or " +
+					"`https://github.com/<owner>/<repo>/pull/<n>`. The action " +
+					"rejects non-github.com hosts so a workflow that templates " +
+					"user-controlled content into this input cannot redirect the " +
+					"action to an attacker-chosen repository.",
+			);
 		}
 		return {
-			githubOrg: match[1],
-			githubRepo: match[2],
-			githubIssueNumber: parseInt(match[3], 10),
+			githubOrg: parsed.owner,
+			githubRepo: parsed.repo,
+			githubIssueNumber: parsed.number,
 		};
 	}
 
@@ -322,7 +134,7 @@ export class CoderAgentChatAction {
 	 * Generate chat URL.
 	 */
 	generateChatUrl(chatId: ChatId): string {
-		return `${normalizeBaseUrl(this.inputs.coderURL)}/chats/${chatId}`;
+		return `${normalizeBaseUrl(this.inputs.coderURL)}/agents/${chatId}`;
 	}
 
 	// Post or update the success comment on the linked issue or pull
@@ -372,17 +184,6 @@ export class CoderAgentChatAction {
 			body,
 			marker,
 		});
-	}
-
-	/**
-	 * Warn loudly when the user opts in to inputs whose runtime behavior
-	 * is not yet wired. The schema accepts these so the contract is stable;
-	 * the warning prevents silent no-ops for workflow authors who explicitly
-	 * opt in.
-	 */
-	warnUnwiredInputs(): void {
-		// All v0 inputs are now wired. The helper remains for the test
-		// suite import and future unwired inputs.
 	}
 
 	/**
@@ -531,7 +332,7 @@ export class CoderAgentChatAction {
 	 * Throw when a terminal chat ended in `error`; pass `waiting` and
 	 * `completed` through unchanged. The `api_error` kind is coarse:
 	 * a workflow branching on it cannot distinguish chat-level failures
-	 * from polling-transport failures. CODAGT-290 will refine the
+	 * from polling-transport failures. Future work may refine the
 	 * mapping by inspecting `last_error`.
 	 */
 	private throwOnChatError(chat: CoderChat): CoderChat {
@@ -582,206 +383,24 @@ export class CoderAgentChatAction {
 	}
 
 	/**
-	 * Resolve the Coder username to run as. Resolution order, high to low:
-	 *
-	 * 1. `coder-username` input.
-	 * 2. `github-user-id` input.
-	 * 3. `context.payload.sender.id` (issue, pull request, comment, and most
-	 *    webhook-driven events that carry the triggering user under `sender`).
-	 * 4. `context.actor` for events whose payload lacks a usable `sender.id`
-	 *    (partial sender objects, bot dispatches, custom dispatch chains).
-	 *    Resolved to a numeric id via `octokit.rest.users.getByUsername`,
-	 *    then to a Coder user.
-	 *
-	 * `schedule` events are refused before any auto-resolve source: their
-	 * `actor` is the workflow file's last editor, not a triggering identity.
-	 *
-	 * Throws naming both inputs when no source resolves. Intermediate
-	 * failures are wrapped to name the auto-resolved source, preserve the
-	 * upstream error, and recommend `coder-username` as the bypass.
-	 *
-	 * Before sources 3 and 4, a trust gate (`classifyAutoResolveTrust`)
-	 * refuses auto-resolve for fork pull requests and for triggering
-	 * identities whose `comment.author_association` or
-	 * `review.author_association` lacks repository write access (anything
-	 * other than `OWNER`, `MEMBER`, `COLLABORATOR`). This prevents a
-	 * hostile-trigger attack where an attacker who happens to have a
-	 * Coder identity could open a fork PR or drop a comment to bind
-	 * their Coder identity to the workflow and execute
-	 * attacker-controlled prompts under the workflow's Coder session
-	 * token. Setting `coder-username` or `github-user-id` bypasses the
-	 * trust gate: the workflow author has explicitly chosen the identity.
-	 *
-	 * Returns `{ username, user? }`. `user` is set when the identity path
-	 * fetched a `CoderSDKUser` (sources 2-4); the explicit `coder-username`
-	 * path (source 1) always now also fetches the user via
-	 * `getCoderUserByUsername` so `user.id` is available for the
-	 * idempotency-by-label per-user scope.
-	 * `resolveOrganizationID` reuses `user` to read `organization_ids`
-	 * without a redundant lookup.
-	 */
-	async resolveCoderUsername(): Promise<{
-		username: string;
-		user: CoderSDKUser;
-	}> {
-		if (this.inputs.coderUsername) {
-			core.info(`Using provided Coder username: ${this.inputs.coderUsername}`);
-			// Fetch the full user so `user.id` is available downstream for
-			// the `coder-agents-chat-action-user` per-user reuse scope.
-			let coderUser: CoderSDKUser;
-			try {
-				coderUser = await this.coder.getCoderUserByUsername(
-					this.inputs.coderUsername,
-				);
-			} catch (err) {
-				// Symmetric with the named-org 404 wrap in `resolveOrganizationID`.
-				if (err instanceof CoderAPIError && err.statusCode === 404) {
-					throw new ActionFailureError(
-						"user_not_found",
-						`Coder user '${this.inputs.coderUsername}' not found. ` +
-							"Check the `coder-username` input value.",
-						undefined,
-						{ cause: err },
-					);
-				}
-				throw err;
-			}
-			return { username: coderUser.username, user: coderUser };
-		}
-		if (this.inputs.githubUserID !== undefined) {
-			core.info(
-				`Looking up Coder user by GitHub user ID: ${this.inputs.githubUserID}`,
-			);
-			const coderUser = await this.coder.getCoderUserByGitHubId(
-				this.inputs.githubUserID,
-			);
-			return { username: coderUser.username, user: coderUser };
-		}
-
-		// Refuse before any auto-resolve source so the exclusion is semantic,
-		// not an artifact of source ordering. Today's `schedule` payloads
-		// omit `sender`, but a future shape that delivered it would still
-		// describe the underlying webhook trigger, not the cron run.
-		if (this.context.eventName === "schedule") {
-			throw new Error(
-				"Cannot auto-resolve a GitHub identity for `schedule` events: " +
-					"`github.context.actor` for cron-triggered runs is the workflow " +
-					"file's last editor, not the triggering user. " +
-					"Set the `coder-username` input to a Coder username, or set " +
-					"`github-user-id` to the GitHub numeric user id of the user the " +
-					"chat should run as.",
-			);
-		}
-
-		// Trust gate: before auto-resolving from `sender.id` or `actor`,
-		// refuse if the triggering identity comes from a fork PR or carries a
-		// low-trust `author_association`. Without this gate, an attacker who
-		// happens to have a Coder identity could open a fork PR or drop an
-		// issue comment to bind their Coder identity to the workflow and
-		// execute attacker-controlled prompts under the workflow's Coder
-		// token. Explicit `coder-username` and `github-user-id` inputs are
-		// handled above and bypass this gate by design.
-		const trust = classifyAutoResolveTrust(this.context);
-		if (trust.kind === "untrusted") {
-			throw new Error(
-				"Refusing to auto-resolve a GitHub identity: " +
-					`${trust.reason}. ` +
-					"Set the `coder-username` input to a Coder username, or set " +
-					"`github-user-id` to the GitHub numeric user id of the user " +
-					"the chat should run as.",
-			);
-		}
-		if (trust.kind === "trusted") {
-			core.info(`Auto-resolve trust check passed: ${trust.reason}`);
-		}
-
-		// Prefer `sender.id` over `actor`: it's already numeric, no extra
-		// API call. The guard mirrors `z.number().int().positive()` on the
-		// `github-user-id` input.
-		const senderId = this.context.payload?.sender?.id;
-		if (
-			typeof senderId === "number" &&
-			Number.isInteger(senderId) &&
-			senderId > 0
-		) {
-			core.info(
-				`Auto-resolving Coder user from github.context.payload.sender.id: ${senderId}`,
-			);
-			try {
-				const coderUser = await this.coder.getCoderUserByGitHubId(senderId);
-				return { username: coderUser.username, user: coderUser };
-			} catch (err) {
-				throw new Error(
-					`Failed to resolve Coder user from github.context.payload.sender.id (${senderId}): ${describeError(err)}. ` +
-						"Set the `coder-username` input to bypass auto-resolution.",
-				);
-			}
-		}
-
-		// Actor fallback for events whose payload lacks a usable `sender.id`.
-		// `workflow_dispatch` payloads do include `sender.id`, so source 3
-		// handles it; this branch covers partial sender objects, bot
-		// dispatches, and custom dispatch chains.
-		const actor = this.context.actor;
-		if (actor) {
-			core.info(
-				`Auto-resolving Coder user from github.context.actor: ${actor}`,
-			);
-			let actorId: number;
-			try {
-				const { data } = await this.octokit.rest.users.getByUsername({
-					username: actor,
-				});
-				actorId = data.id;
-			} catch (err) {
-				throw new Error(
-					`Failed to resolve GitHub user id for github.context.actor (${actor}): ${describeError(err)}. ` +
-						"Set the `coder-username` input to bypass auto-resolution.",
-				);
-			}
-			try {
-				const coderUser = await this.coder.getCoderUserByGitHubId(actorId);
-				return { username: coderUser.username, user: coderUser };
-			} catch (err) {
-				throw new Error(
-					`Failed to resolve Coder user for github.context.actor (${actor}, GitHub user id ${actorId}): ${describeError(err)}. ` +
-						"Set the `coder-username` input to bypass auto-resolution.",
-				);
-			}
-		}
-
-		throw new Error(
-			"Could not auto-resolve a GitHub identity from the workflow context. " +
-				"Set the `coder-username` input to a Coder username, or set " +
-				"`github-user-id` to the GitHub numeric user id of the user the " +
-				"chat should run as.",
-		);
-	}
-
-	/**
 	 * Resolve the organization id to send on createChat. Resolution order:
 	 *
 	 * 1. `coder-organization` input, looked up by name via
 	 *    `GET /api/v2/organizations/{name}`. Recommended when the user
 	 *    belongs to more than one organization, since the fallback choice
 	 *    is non-deterministic; a `core.warning` is emitted in that case.
-	 * 2. The resolved Coder user's `organization_ids[0]`. When identity was
-	 *    resolved via the GitHub-id path the user object is reused; the
-	 *    `coder-username` path looks the user up here via
-	 *    `getCoderUserByUsername`.
+	 * 2. The Coder user's `organization_ids[0]`. The action calls
+	 *    `users/me` once in `runInner` and threads the result here, so this
+	 *    helper never refetches.
 	 *
 	 * Throws `ActionFailureError("org_not_found")` when `coder-organization`
-	 * names an org that does not exist (HTTP 404) or the resolved user has no
-	 * org memberships. Throws `ActionFailureError("user_not_found")` when only
-	 * `coder-username` is set and the user is missing (HTTP 404). Other API
-	 * errors propagate as `CoderAPIError`. The original error is attached via
-	 * `options.cause` on every wrap; `run()`'s `handleFailure` re-classifies
-	 * the failure into the failure-path comment.
+	 * names an org that does not exist (HTTP 404) or the Coder user has
+	 * no org memberships. Other API errors propagate as `CoderAPIError`. The
+	 * original error is attached via `options.cause` on every wrap;
+	 * `run()`'s `handleFailure` re-classifies the failure into the
+	 * failure-path comment.
 	 */
-	async resolveOrganizationID(
-		coderUsername: string,
-		resolvedUser: CoderSDKUser | undefined,
-	): Promise<string> {
+	async resolveOrganizationID(user: CoderSDKUser): Promise<string> {
 		if (this.inputs.coderOrganization) {
 			core.info(
 				`Resolving Coder organization by name: ${this.inputs.coderOrganization}`,
@@ -807,28 +426,6 @@ export class CoderAgentChatAction {
 			}
 		}
 
-		// Default to the user's first org membership. Fetch the user lazily
-		// when only `coder-username` was provided; wrap a 404 into
-		// `user_not_found` symmetrically with the named-org 404 above.
-		let user: CoderSDKUser;
-		if (resolvedUser) {
-			user = resolvedUser;
-		} else {
-			try {
-				user = await this.coder.getCoderUserByUsername(coderUsername);
-			} catch (err) {
-				if (err instanceof CoderAPIError && err.statusCode === 404) {
-					throw new ActionFailureError(
-						"user_not_found",
-						`Coder user '${coderUsername}' not found. ` +
-							"Check the `coder-username` input value.",
-						undefined,
-						{ cause: err },
-					);
-				}
-				throw err;
-			}
-		}
 		const orgID = user.organization_ids[0];
 		if (!orgID) {
 			throw new ActionFailureError(
@@ -840,8 +437,8 @@ export class CoderAgentChatAction {
 		}
 		if (user.organization_ids.length > 1) {
 			// `organization_ids` is server-built via `array_agg` with no
-			// `ORDER BY`, so the choice is non-deterministic across vacuums and
-			// restarts. Recommend pinning via `coder-organization`.
+			// `ORDER BY`, so the choice is non-deterministic across vacuums
+			// and restarts. Recommend pinning via `coder-organization`.
 			core.warning(
 				`Coder user '${user.username}' has ${user.organization_ids.length} organization memberships; ` +
 					`defaulting to ${orgID}. ` +
@@ -885,9 +482,16 @@ export class CoderAgentChatAction {
 	// the failure-path output contract is uniform.
 	private async handleFailure(error: unknown): Promise<ActionFailureError> {
 		// `detail` is the comment-body shape; `failure` is the thrown shape.
-		// Classify first so spend-exceeded fields land in the comment body
-		// for both raw-Error and ActionFailureError inputs.
-		const detail: FailureDetail = classifyError(error);
+		// Pass an ActionFailureError's `kind` through to the body so the
+		// posted comment matches `chat-error-kind`. `classifyError` lives
+		// in `comment.ts` and cannot import `ActionFailureError` (cycle).
+		// `spend_exceeded` carries extra fields on the body variant and is
+		// only ever produced by `classifyError`, never thrown as an
+		// ActionFailureError, so the narrow is exhaustive.
+		const detail: FailureDetail =
+			error instanceof ActionFailureError && error.kind !== "spend_exceeded"
+				? { kind: error.kind, message: error.message }
+				: classifyError(error);
 		const failure =
 			error instanceof ActionFailureError
 				? error
@@ -920,7 +524,7 @@ export class CoderAgentChatAction {
 			deriveCommentKey({ ...this.inputs, workflow }),
 		);
 		const body = buildFailureCommentBody(detail, {
-			chatsUrl: buildDeploymentChatsUrl(this.inputs.coderURL),
+			agentsUrl: buildDeploymentAgentsUrl(this.inputs.coderURL),
 			marker,
 			chatUrl: failure.chatUrl,
 			chatStatus: failure.chat?.status,
@@ -937,16 +541,21 @@ export class CoderAgentChatAction {
 	}
 
 	private async runInner(): Promise<ActionOutputs> {
-		this.warnUnwiredInputs();
-
-		const { username: coderUsername, user: resolvedUser } =
-			await this.resolveCoderUsername();
-
 		const { githubOrg, githubRepo, githubIssueNumber } = this.parseGithubURL();
 		core.info(`GitHub owner: ${githubOrg}`);
 		core.info(`GitHub repo: ${githubRepo}`);
 		core.info(`GitHub item number: ${githubIssueNumber}`);
-		core.info(`Coder username: ${coderUsername}`);
+
+		// The chat owner on POST /api/experimental/chats is always the
+		// `coder-token` holder; the API has no owner override. The action
+		// fetches users/me once for the org pick and the `coder-username`
+		// output. The resulting username also tells the workflow author
+		// from the run log which Coder identity the chat ran as.
+		const tokenOwner = await this.coder.getAuthenticatedUser();
+		const coderUsername = tokenOwner.username;
+		core.info(
+			`Resolved Coder user from \`coder-token\` (users/me): ${coderUsername}`,
+		);
 
 		// If an existing chat ID is provided, send a message to it
 		if (this.inputs.existingChatId) {
@@ -970,22 +579,16 @@ export class CoderAgentChatAction {
 		}
 
 		// Chat reuse: the action reuses the most recent non-archived chat
-		// scoped to this `gh-target`, the resolved Coder user, and the
-		// workflow name (when `GITHUB_WORKFLOW` is set), so re-runs and
-		// follow-up triggers converge on one chat per target/user/workflow.
+		// scoped to this `gh-target` and the workflow name (when
+		// `GITHUB_WORKFLOW` is set). All chats are owned by the token
+		// holder so the per-user reuse label is not part of the scope.
 		// `force-new-chat` skips the lookup; `idempotency-key` shards
 		// further so two workflow runs with the same scope can maintain
-		// distinct chats.
-		const sanitizedKey = this.inputs.idempotencyKey
-			? sanitizeLabelKey(this.inputs.idempotencyKey)
+		// distinct chats. Workflows that want per-actor separation can
+		// set `idempotency-key: ${{ github.actor }}` themselves.
+		const sanitizedIdempotency = this.inputs.idempotencyKey
+			? sanitizeLabelToken(this.inputs.idempotencyKey)
 			: undefined;
-		if (sanitizedKey && RESERVED_LABEL_KEYS.has(sanitizedKey)) {
-			throw new Error(
-				`idempotency-key sanitizes to a reserved chat-label key ("${sanitizedKey}"). ` +
-					`Reserved keys: ${[...RESERVED_LABEL_KEYS].join(", ")}. ` +
-					"Choose a different idempotency-key value.",
-			);
-		}
 		const ghTarget = `${githubOrg}/${githubRepo}#${githubIssueNumber}`;
 		const workflow = process.env.GITHUB_WORKFLOW || undefined;
 
@@ -994,9 +597,8 @@ export class CoderAgentChatAction {
 		} else {
 			const follow = await this.findReuseMatch(
 				ghTarget,
-				resolvedUser.id,
 				workflow,
-				sanitizedKey,
+				sanitizedIdempotency,
 			);
 			if (follow) {
 				core.info(`Reusing existing chat: ${follow.id}`);
@@ -1016,21 +618,13 @@ export class CoderAgentChatAction {
 		// and resolving eagerly would fire an extra API call and a spurious
 		// `org_not_found` failure for users with no org memberships.
 		core.info("Creating new agents chat...");
-		const organizationID = await this.resolveOrganizationID(
-			coderUsername,
-			resolvedUser,
-		);
+		const organizationID = await this.resolveOrganizationID(tokenOwner);
 		const req: CreateChatRequest = {
 			organization_id: organizationID,
 			content: [{ type: "text", text: this.inputs.chatPrompt }],
 			workspace_id: this.inputs.workspaceId,
 			model_config_id: this.inputs.modelConfigId,
-			labels: this.buildChatLabels(
-				ghTarget,
-				resolvedUser.id,
-				workflow,
-				sanitizedKey,
-			),
+			labels: this.buildChatLabels(ghTarget, workflow, sanitizedIdempotency),
 		};
 
 		const createdChat = await this.coder.createChat(req);
@@ -1166,8 +760,13 @@ export class CoderAgentChatAction {
 
 	/**
 	 * Most-recent non-archived chat matching the reuse scope, or undefined.
-	 * Scope: gh-target + coder-user; workflow when GITHUB_WORKFLOW is set;
-	 * sanitized idempotency-key when set. Warns on multiple matches.
+	 * Scope: gh-target; workflow when GITHUB_WORKFLOW is set; sanitized
+	 * idempotency-key when set. Warns on multiple matches.
+	 *
+	 * All chats this action creates are owned by the `coder-token` holder
+	 * (the chats API has no owner override), so the reuse scope does not
+	 * include a per-actor label. Workflows that want per-actor separation
+	 * pass `idempotency-key: ${{ github.actor }}` themselves.
 	 *
 	 * The label set must stay in sync with `buildChatLabels`: a key the
 	 * lookup queries but the create branch doesn't write (or vice versa)
@@ -1176,20 +775,18 @@ export class CoderAgentChatAction {
 	 */
 	private async findReuseMatch(
 		ghTarget: string,
-		coderUserId: string,
 		workflow: string | undefined,
-		sanitizedKey: string | undefined,
+		sanitizedIdempotency: string | undefined,
 	): Promise<CoderChat | undefined> {
 		const labels: string[] = [
 			`${ACTION_LABEL_KEYS.marker}:true`,
 			`${ACTION_LABEL_KEYS.target}:${ghTarget}`,
-			`${ACTION_LABEL_KEYS.user}:${coderUserId}`,
 		];
 		if (workflow) {
 			labels.push(`${ACTION_LABEL_KEYS.workflow}:${workflow}`);
 		}
-		if (sanitizedKey) {
-			labels.push(`${sanitizedKey}:true`);
+		if (sanitizedIdempotency) {
+			labels.push(`${ACTION_LABEL_KEYS.idempotency}:${sanitizedIdempotency}`);
 		}
 		let chats: CoderChat[];
 		try {
@@ -1233,9 +830,11 @@ export class CoderAgentChatAction {
 	}
 
 	/**
-	 * Labels written on chat creation. Three are always written; the
-	 * workflow label is added when GITHUB_WORKFLOW is set; the sanitized
-	 * idempotency-key is added when set.
+	 * Labels written on chat creation. The marker and gh-target labels
+	 * are always written; the workflow label is added when
+	 * `GITHUB_WORKFLOW` is set; the sanitized idempotency-key is added
+	 * under the fixed `coder-agents-chat-action-idempotency` key when
+	 * set.
 	 *
 	 * The label set must stay in sync with `findReuseMatch`: a key the
 	 * create branch writes but the lookup doesn't query (or vice versa)
@@ -1244,29 +843,18 @@ export class CoderAgentChatAction {
 	 */
 	private buildChatLabels(
 		ghTarget: string,
-		coderUserId: string,
 		workflow: string | undefined,
-		sanitizedKey: string | undefined,
+		sanitizedIdempotency: string | undefined,
 	): Record<string, string> {
-		// Defense in depth: `runInner` rejects collisions before any API
-		// call; this guards direct callers.
-		if (sanitizedKey && RESERVED_LABEL_KEYS.has(sanitizedKey)) {
-			throw new Error(
-				`idempotency-key sanitizes to a reserved chat-label key ("${sanitizedKey}"). ` +
-					`Reserved keys: ${[...RESERVED_LABEL_KEYS].join(", ")}. ` +
-					"Choose a different idempotency-key value.",
-			);
-		}
 		const labels: Record<string, string> = {
 			[ACTION_LABEL_KEYS.marker]: "true",
 			[ACTION_LABEL_KEYS.target]: ghTarget,
-			[ACTION_LABEL_KEYS.user]: coderUserId,
 		};
 		if (workflow) {
 			labels[ACTION_LABEL_KEYS.workflow] = workflow;
 		}
-		if (sanitizedKey) {
-			labels[sanitizedKey] = "true";
+		if (sanitizedIdempotency) {
+			labels[ACTION_LABEL_KEYS.idempotency] = sanitizedIdempotency;
 		}
 		return labels;
 	}

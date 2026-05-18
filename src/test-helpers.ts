@@ -6,7 +6,6 @@ import {
 } from "./coder-client";
 import type {
 	CoderSDKUser,
-	CoderSDKGetUsersResponse,
 	CoderChat,
 	CoderOrganization,
 	CreateChatRequest,
@@ -17,7 +16,6 @@ import type {
 import type { Clock } from "./action";
 import type { ActionInputs } from "./schemas";
 import { DEFAULT_WAIT_TIMEOUT_SECONDS } from "./schemas";
-import type { ActionContext } from "./action";
 
 /**
  * Fake clock that records every sleep duration and treats sleeps as
@@ -47,25 +45,6 @@ export const mockUser: CoderSDKUser = {
 	email: "test@example.com",
 	organization_ids: ["660e8400-e29b-41d4-a716-446655440000"],
 	github_com_user_id: 12345,
-};
-
-export const mockUserList: CoderSDKGetUsersResponse = {
-	users: [mockUser],
-};
-
-export const mockUserListEmpty: CoderSDKGetUsersResponse = {
-	users: [],
-};
-
-export const mockUserListDuplicate: CoderSDKGetUsersResponse = {
-	users: [
-		mockUser,
-		{
-			...mockUser,
-			id: "660e8400-e29b-41d4-a716-446655440001",
-			username: "testuser2",
-		},
-	],
 };
 
 // User with no organization memberships.
@@ -142,7 +121,6 @@ export function createMockInputs(
 		coderOrganization: undefined,
 		githubToken: "github-token",
 		githubURL: "https://github.com/test-org/test-repo/issues/123",
-		githubUserID: 12345,
 		commentOnIssue: true,
 		wait: "none",
 		waitTimeoutSeconds: DEFAULT_WAIT_TIMEOUT_SECONDS,
@@ -155,10 +133,6 @@ export function createMockInputs(
  * Mock CoderClient for testing
  */
 export class MockCoderClient implements CoderClient {
-	public mockGetCoderUserByGithubID = mock();
-	public mockGetCoderUserByUsername = mock((_username: string) =>
-		Promise.resolve(mockUser),
-	);
 	public mockGetOrganizationByName = mock((_name: string) =>
 		Promise.resolve(mockOrganization),
 	);
@@ -168,13 +142,10 @@ export class MockCoderClient implements CoderClient {
 	public mockListChats = mock((_opts?: ListChatsOptions) =>
 		Promise.resolve([] as CoderChat[]),
 	);
+	public mockGetAuthenticatedUser = mock(() => Promise.resolve(mockUser));
 
-	async getCoderUserByGitHubId(githubUserId: number): Promise<CoderSDKUser> {
-		return this.mockGetCoderUserByGithubID(githubUserId);
-	}
-
-	async getCoderUserByUsername(username: string): Promise<CoderSDKUser> {
-		return this.mockGetCoderUserByUsername(username);
+	async getAuthenticatedUser(): Promise<CoderSDKUser> {
+		return this.mockGetAuthenticatedUser();
 	}
 
 	async getOrganizationByName(name: string): Promise<CoderOrganization> {
@@ -199,21 +170,6 @@ export class MockCoderClient implements CoderClient {
 	async listChats(opts?: ListChatsOptions): Promise<CoderChat[]> {
 		return this.mockListChats(opts);
 	}
-}
-
-/**
- * Build a minimal `ActionContext` shaped like `@actions/github`'s Context.
- * Tests populate only the fields they exercise.
- */
-export function createMockContext(
-	overrides?: Partial<ActionContext>,
-): ActionContext {
-	return {
-		eventName: "",
-		actor: "",
-		payload: {},
-		...overrides,
-	};
 }
 
 /**

@@ -1,12 +1,8 @@
 import * as core from "@actions/core";
 import type { getOctokit } from "@actions/github";
-import {
-	type ChatErrorKind,
-	type ChatStatus,
-	CoderAPIError,
-} from "./coder-client";
-import { sanitizeLabelKey } from "./sanitize-label-key";
-import type { ActionInputs } from "./schemas";
+import { type ChatStatus, CoderAPIError } from "./coder-client";
+import { sanitizeLabelToken } from "./sanitize-label-token";
+import type { ActionInputs, ChatErrorKind } from "./schemas";
 import { normalizeBaseUrl } from "./url";
 
 // Re-export so `action.ts` and tests keep their existing import sites.
@@ -14,15 +10,49 @@ export { normalizeBaseUrl } from "./url";
 
 type Octokit = ReturnType<typeof getOctokit>;
 
-// Shared regex for GitHub issue and PR URLs. Used by `deriveCommentKey` and
-// `parseGithubURL` so adding another path (e.g. `/discussions/`) is one edit.
-// Anchored at the tail so URLs with extra path segments after the number
-// (e.g. `.../issues/123/files`) are rejected rather than silently truncated.
-// The `(?:[?#].*)?` group keeps the anchor tolerant of query strings and
-// fragments that real-world `github-url` inputs can carry (e.g. a URL copied
-// while viewing a specific comment).
-export const GITHUB_URL_REGEX =
-	/([^/]+)\/([^/]+)\/(?:issues|pull)\/(\d+)\/?(?:[?#].*)?$/;
+// Anchored regex for a GitHub issue or PR URL on `github.com`. Anchored
+// at both ends so a non-github host or extra path segments
+// (e.g. `.../issues/123/files`, `https://attacker.example/owner/repo/issues/1`)
+// are rejected rather than silently truncated. The `(?:[?#].*)?` group keeps
+// the anchor tolerant of query strings and fragments that real-world
+// `github-url` inputs can carry (e.g. a URL copied while viewing a specific
+// comment).
+const GITHUB_URL_REGEX =
+	/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:issues|pull)\/(\d+)\/?(?:[?#].*)?$/;
+
+/**
+ * Parsed components of a `github-url` input. Returned by
+ * `parseGithubItemURL` after host and path validation.
+ */
+export interface GithubItemURL {
+	owner: string;
+	repo: string;
+	number: number;
+}
+
+/**
+ * Validate `input` as a `https://github.com/<owner>/<repo>/(issues|pull)/<n>`
+ * URL and return its components, or `undefined` if it does not match. The
+ * host is anchored to `github.com` so a workflow that templates user-
+ * controlled content into `github-url` cannot coerce the action into
+ * commenting on an arbitrary attacker-chosen owner/repo.
+ */
+export function parseGithubItemURL(
+	input: string | undefined,
+): GithubItemURL | undefined {
+	if (!input) {
+		return undefined;
+	}
+	const match = input.match(GITHUB_URL_REGEX);
+	if (!match) {
+		return undefined;
+	}
+	return {
+		owner: match[1],
+		repo: match[2],
+		number: Number.parseInt(match[3], 10),
+	};
+}
 
 // Discriminated union so spend-exceeded fields are only representable on the
 // spend-exceeded variant; the body builder reads them directly without a
@@ -36,19 +66,14 @@ export type FailureDetail =
 			resetsAt: string;
 	  }
 	| {
-			kind:
-				| "user_not_found"
-				| "user_ambiguous"
-				| "org_not_found"
-				| "api_error"
-				| "timeout";
+			kind: "org_not_found" | "api_error" | "timeout";
 			message: string;
 	  };
 
 // chat-error-kind enum surfaced as the action's `chat-error-kind` output.
-// Re-exported from `coder-client.ts`; this re-export keeps the name local
-// to `comment.ts` callers and `index.ts` for backward source compatibility.
-export type { ChatErrorKind } from "./coder-client";
+// Re-exported so callers can import the type from `comment.ts` next to
+// `FailureDetail` / `classifyError` / `buildFailureCommentBody`.
+export type { ChatErrorKind } from "./schemas";
 
 const COMMENT_MARKER_PREFIX = "<!-- coder-agents-chat-action:";
 const COMMENT_MARKER_SUFFIX = " -->";
@@ -75,18 +100,18 @@ export function deriveCommentKey(
 	},
 ): string {
 	if (inputs.idempotencyKey) {
-		return sanitizeLabelKey(inputs.idempotencyKey);
+		return sanitizeLabelToken(inputs.idempotencyKey);
 	}
-	const match = inputs.githubURL.match(GITHUB_URL_REGEX);
+	const parsed = parseGithubItemURL(inputs.githubURL);
 	let base: string;
-	if (!match) {
+	if (!parsed) {
 		// The action validates githubURL upstream; if we get here the input is
 		// malformed and the failure-path comment cannot find a stable target.
 		// Fall back to the URL itself so re-runs at least collapse on identical
 		// URLs, even if the marker is uglier.
 		base = inputs.githubURL;
 	} else {
-		base = `${match[1]}/${match[2]}#${match[3]}`;
+		base = `${parsed.owner}/${parsed.repo}#${parsed.number}`;
 	}
 	if (inputs.workflow) {
 		return `${base}:${inputs.workflow}`;
@@ -96,10 +121,7 @@ export function deriveCommentKey(
 
 // Map a thrown error to a FailureDetail.
 //
-// Classification keys on explicit signals so a message reword cannot demote
-// a kind to `api_error`:
-//   - `kind` on CoderAPIError (set by the client) marks user-lookup
-//     failures.
+// Classification:
 //   - 409 with the spend-exceeded body shape (`spent_micros`, `limit_micros`,
 //     `resets_at`) becomes `spend_exceeded`.
 //   - Anything else becomes `api_error`. The message is the body's `message`
@@ -107,12 +129,6 @@ export function deriveCommentKey(
 //     falls back to `err.message` only when the body is empty.
 export function classifyError(err: unknown): FailureDetail {
 	if (err instanceof CoderAPIError) {
-		// Check the explicit error-code discriminator first so a client error
-		// can never be misclassified by an unrelated 409 body shape.
-		const code = mapErrorCodeToKind(err.kind);
-		if (code) {
-			return { kind: code, message: err.message };
-		}
 		const spend = parseSpendExceededBody(err.response);
 		if (err.statusCode === 409 && spend) {
 			return {
@@ -132,18 +148,6 @@ export function classifyError(err: unknown): FailureDetail {
 		return { kind: "api_error", message: err.message };
 	}
 	return { kind: "api_error", message: String(err) };
-}
-
-function mapErrorCodeToKind(
-	code: ChatErrorKind | undefined,
-): "user_not_found" | "user_ambiguous" | undefined {
-	switch (code) {
-		case "user_not_found":
-		case "user_ambiguous":
-			return code;
-		default:
-			return undefined;
-	}
 }
 
 interface SpendExceededFields {
@@ -212,8 +216,34 @@ function formatMicrosAsDollars(micros: number): string {
 	return `$${dollars.toFixed(2)}`;
 }
 
+/**
+ * Render `detail.message` (or any externally-influenced string) inside a
+ * fenced code block so markdown syntax in the message body cannot break
+ * out of the failure-comment list. The fence is 4 backticks; any literal
+ * 4-or-more backtick run in the message is downgraded to 3 so the
+ * surrounding fence stays closable. Control bytes other than newline and
+ * tab are stripped so adversarial content cannot inject CR-only line
+ * endings or other terminal escapes. The result is capped at
+ * `DETAIL_BLOCK_MAX_CHARS` to bound comment size against runaway messages.
+ */
+export const DETAIL_BLOCK_MAX_CHARS = 4000;
+
+export function renderDetailBlock(message: string): string {
+	const stripped = message.replace(
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping C0 controls is the point.
+		/[\x00-\x08\x0B-\x1F\x7F]/g,
+		"",
+	);
+	const capped =
+		stripped.length > DETAIL_BLOCK_MAX_CHARS
+			? stripped.slice(0, DETAIL_BLOCK_MAX_CHARS)
+			: stripped;
+	const safe = capped.replace(/`{4,}/g, "```");
+	return `- Detail:\n\`\`\`\`\n${safe}\n\`\`\`\``;
+}
+
 export interface FailureCommentContext {
-	chatsUrl: string;
+	agentsUrl: string;
 	marker: string;
 	// Chat-specific URL when the failure surfaced after the chat existed
 	// (timeout, error-state terminal, polling-network blip). Flips the
@@ -243,7 +273,7 @@ export function buildFailureCommentBody(
 	const lines: string[] = [heading, ""];
 	const linkLine = ctx.chatUrl
 		? `View the chat in the Coder deployment: ${ctx.chatUrl}`
-		: `View chats in the Coder deployment: ${ctx.chatsUrl}`;
+		: `View agents in the Coder deployment: ${ctx.agentsUrl}`;
 	switch (detail.kind) {
 		case "spend_exceeded":
 			lines.push(
@@ -259,37 +289,13 @@ export function buildFailureCommentBody(
 			}
 			lines.push("", linkLine);
 			break;
-		case "user_not_found":
-			lines.push(
-				"No Coder user could be resolved for this run. Adjust either " +
-					"the `github-user-id` input (the GitHub identity is not linked " +
-					"to a Coder user) or pass `coder-username` directly.",
-				"",
-				`- chat-error-kind=${detail.kind}`,
-				`- Detail: ${detail.message}`,
-				"",
-				linkLine,
-			);
-			break;
-		case "user_ambiguous":
-			lines.push(
-				"Multiple Coder users matched the GitHub identity. Set the " +
-					"`coder-username` input to the specific account this workflow " +
-					"should run as.",
-				"",
-				`- chat-error-kind=${detail.kind}`,
-				`- Detail: ${detail.message}`,
-				"",
-				linkLine,
-			);
-			break;
 		case "org_not_found":
 			lines.push(
-				"The resolved Coder user has no matching organization. Set the " +
+				"The Coder user has no matching organization. Set the " +
 					"`coder-organization` input or grant the user a membership.",
 				"",
 				`- chat-error-kind=${detail.kind}`,
-				`- Detail: ${detail.message}`,
+				renderDetailBlock(detail.message),
 				"",
 				linkLine,
 			);
@@ -298,7 +304,7 @@ export function buildFailureCommentBody(
 			lines.push(apiErrorPhrase(runPhase, ctx), "");
 			lines.push(
 				`- chat-error-kind=${detail.kind}`,
-				`- Detail: ${detail.message}`,
+				renderDetailBlock(detail.message),
 			);
 			if (ctx.chatStatus === "error") {
 				lines.push(
@@ -317,7 +323,7 @@ export function buildFailureCommentBody(
 					"`wait-timeout-seconds`.",
 				"",
 				`- chat-error-kind=${detail.kind}`,
-				`- Detail: ${detail.message}`,
+				renderDetailBlock(detail.message),
 				"",
 				linkLine,
 			);
@@ -543,8 +549,8 @@ export async function upsertCommentByMarker(args: {
 	});
 }
 
-// Deployment-level chats URL for the "view chats" link in the failure body.
+// Deployment-level agents URL for the "view agents" link in the failure body.
 // We use the deployment list because a creation failure has no chat ID.
-export function buildDeploymentChatsUrl(coderURL: string): string {
-	return `${normalizeBaseUrl(coderURL)}/chats`;
+export function buildDeploymentAgentsUrl(coderURL: string): string {
+	return `${normalizeBaseUrl(coderURL)}/agents`;
 }

@@ -2,15 +2,17 @@ import { describe, expect, mock, test } from "bun:test";
 import { CoderAPIError } from "./coder-client";
 import {
 	buildCommentMarker,
-	buildDeploymentChatsUrl,
+	buildDeploymentAgentsUrl,
 	buildFailureCommentBody,
 	buildSuccessCommentBody,
 	type ChatErrorKind,
 	classifyError,
 	deriveCommentKey,
+	DETAIL_BLOCK_MAX_CHARS,
 	type FailureDetail,
 	findCommentByPredicate,
 	normalizeBaseUrl,
+	renderDetailBlock,
 	type SuccessCommentContext,
 } from "./comment";
 
@@ -63,12 +65,16 @@ describe("deriveCommentKey", () => {
 		).toBe("owner/repo#42");
 	});
 
-	test("handles enterprise GitHub URLs", () => {
+	test("falls back to the raw URL for non-github.com hosts (host validation)", () => {
+		// The regex anchors to github.com so an enterprise host (or
+		// attacker-chosen host) does not parse out a usable owner/repo.
+		// The marker still collapses identical URLs across re-runs, but
+		// does not pretend to know the target.
 		expect(
 			deriveCommentKey({
 				githubURL: "https://code.acme.com/owner/repo/issues/42",
 			}),
-		).toBe("owner/repo#42");
+		).toBe("https://code.acme.com/owner/repo/issues/42");
 	});
 
 	test("appends workflow suffix to the derived per-target key", () => {
@@ -125,29 +131,6 @@ describe("classifyError", () => {
 		});
 	});
 
-	test("maps the user-not-found error from getCoderUserByGitHubId", () => {
-		const err = new CoderAPIError(
-			"No Coder user found with GitHub user ID 12345",
-			404,
-			undefined,
-			"user_not_found",
-		);
-		const result = classifyError(err);
-		expect(result.kind).toBe("user_not_found");
-		expect(result.message).toContain("No Coder user found");
-	});
-
-	test("maps the multi-user error from getCoderUserByGitHubId", () => {
-		const err = new CoderAPIError(
-			"Multiple Coder users found with GitHub user ID 12345",
-			409,
-			undefined,
-			"user_ambiguous",
-		);
-		const result = classifyError(err);
-		expect(result.kind).toBe("user_ambiguous");
-	});
-
 	test("falls back to api_error for unknown CoderAPIError shapes", () => {
 		const err = new CoderAPIError("Coder API error: Bad Gateway", 502);
 		const result = classifyError(err);
@@ -196,32 +179,13 @@ describe("classifyError", () => {
 		expect(result.kind).toBe("api_error");
 		expect(result.message).toBe("connection refused");
 	});
-
-	// errorCode takes precedence over the spend-exceeded body shape so the
-	// classifier never silently misclassifies a user-lookup error that
-	// happens to ride a 409 with a spend-shaped body.
-	test("errorCode takes precedence over a spend-shaped 409 body", () => {
-		const err = new CoderAPIError(
-			"Multiple Coder users found with GitHub user ID 12345",
-			409,
-			JSON.stringify({
-				message: "unrelated",
-				spent_micros: 1,
-				limit_micros: 2,
-				resets_at: "",
-			}),
-			"user_ambiguous",
-		);
-		const result = classifyError(err);
-		expect(result.kind).toBe("user_ambiguous");
-	});
 });
 
 describe("buildFailureCommentBody", () => {
 	const marker = "<!-- coder-agents-chat-action:owner/repo#123 -->";
-	const chatsUrl = "https://coder.test/chats";
+	const agentsUrl = "https://coder.test/agents";
 
-	test("spend_exceeded body includes kind, dollar amounts, deployment chat URL, and marker", () => {
+	test("spend_exceeded body includes kind, dollar amounts, deployment agents URL, and marker", () => {
 		const detail: FailureDetail = {
 			kind: "spend_exceeded",
 			message: "Chat usage limit exceeded.",
@@ -229,34 +193,11 @@ describe("buildFailureCommentBody", () => {
 			limitMicros: 5000000,
 			resetsAt: "2026-05-01T00:00:00Z",
 		};
-		const body = buildFailureCommentBody(detail, { chatsUrl, marker });
+		const body = buildFailureCommentBody(detail, { agentsUrl, marker });
 		expect(body).toContain("chat-error-kind=spend_exceeded");
 		expect(body).toContain("$1.23");
 		expect(body).toContain("$5.00");
-		expect(body).toContain(chatsUrl);
-		expect(body.endsWith(marker)).toBe(true);
-	});
-
-	test("user_not_found body names both identity inputs and ends with marker", () => {
-		const detail: FailureDetail = {
-			kind: "user_not_found",
-			message: "No Coder user found with GitHub user ID 12345",
-		};
-		const body = buildFailureCommentBody(detail, { chatsUrl, marker });
-		expect(body).toContain("chat-error-kind=user_not_found");
-		expect(body).toContain("github-user-id");
-		expect(body).toContain("coder-username");
-		expect(body.endsWith(marker)).toBe(true);
-	});
-
-	test("user_ambiguous body suggests coder-username and ends with marker", () => {
-		const detail: FailureDetail = {
-			kind: "user_ambiguous",
-			message: "Multiple Coder users found with GitHub user ID 12345",
-		};
-		const body = buildFailureCommentBody(detail, { chatsUrl, marker });
-		expect(body).toContain("chat-error-kind=user_ambiguous");
-		expect(body).toContain("coder-username");
+		expect(body).toContain(agentsUrl);
 		expect(body.endsWith(marker)).toBe(true);
 	});
 
@@ -265,7 +206,7 @@ describe("buildFailureCommentBody", () => {
 			kind: "api_error",
 			message: "Coder API error: Bad Gateway",
 		};
-		const body = buildFailureCommentBody(detail, { chatsUrl, marker });
+		const body = buildFailureCommentBody(detail, { agentsUrl, marker });
 		expect(body).toContain("chat-error-kind=api_error");
 		expect(body).toContain("Coder API error: Bad Gateway");
 		expect(body.endsWith(marker)).toBe(true);
@@ -279,7 +220,7 @@ describe("buildFailureCommentBody", () => {
 			kind: "org_not_found",
 			message: "Coder user has no organization memberships",
 		};
-		const body = buildFailureCommentBody(detail, { chatsUrl, marker });
+		const body = buildFailureCommentBody(detail, { agentsUrl, marker });
 		expect(body).toContain("chat-error-kind=org_not_found");
 		expect(body).toContain("coder-organization");
 		expect(body.endsWith(marker)).toBe(true);
@@ -295,9 +236,9 @@ describe("buildFailureCommentBody", () => {
 					"after 600s waiting for a terminal status",
 			};
 			const chatUrl =
-				"https://coder.test/chats/990e8400-e29b-41d4-a716-446655440000";
+				"https://coder.test/agents/990e8400-e29b-41d4-a716-446655440000";
 			const body = buildFailureCommentBody(detail, {
-				chatsUrl,
+				agentsUrl,
 				chatUrl,
 				marker,
 			});
@@ -325,9 +266,9 @@ describe("buildFailureCommentBody", () => {
 					"connection reset by peer",
 			};
 			const chatUrl =
-				"https://coder.test/chats/990e8400-e29b-41d4-a716-446655440000";
+				"https://coder.test/agents/990e8400-e29b-41d4-a716-446655440000";
 			const body = buildFailureCommentBody(detail, {
-				chatsUrl,
+				agentsUrl,
 				chatUrl,
 				marker,
 			});
@@ -353,9 +294,9 @@ describe("buildFailureCommentBody", () => {
 				message: "Anthropic 429 rate limit",
 			};
 			const chatUrl =
-				"https://coder.test/chats/990e8400-e29b-41d4-a716-446655440000";
+				"https://coder.test/agents/990e8400-e29b-41d4-a716-446655440000";
 			const body = buildFailureCommentBody(detail, {
-				chatsUrl,
+				agentsUrl,
 				chatUrl,
 				chatStatus: "error",
 				marker,
@@ -380,10 +321,10 @@ describe("buildFailureCommentBody", () => {
 				kind: "api_error",
 				message: "Coder API error: Bad Gateway",
 			};
-			const body = buildFailureCommentBody(detail, { chatsUrl, marker });
+			const body = buildFailureCommentBody(detail, { agentsUrl, marker });
 			expect(body).toContain("**Coder Agents Chat: failed to start**");
 			expect(body).toContain("while running the action");
-			expect(body).toContain(chatsUrl);
+			expect(body).toContain(agentsUrl);
 			expect(body.endsWith(marker)).toBe(true);
 		},
 	);
@@ -408,19 +349,58 @@ describe("normalizeBaseUrl", () => {
 	});
 });
 
-describe("buildDeploymentChatsUrl", () => {
-	test("appends /chats to a clean base URL", () => {
-		expect(buildDeploymentChatsUrl("https://coder.test")).toBe(
-			"https://coder.test/chats",
+describe("buildDeploymentAgentsUrl", () => {
+	test("appends /agents to a clean base URL", () => {
+		expect(buildDeploymentAgentsUrl("https://coder.test")).toBe(
+			"https://coder.test/agents",
 		);
 	});
 
 	test("normalizes trailing slash, query, and fragment before appending", () => {
-		expect(buildDeploymentChatsUrl("https://coder.test/?x=1")).toBe(
-			"https://coder.test/chats",
+		expect(buildDeploymentAgentsUrl("https://coder.test/?x=1")).toBe(
+			"https://coder.test/agents",
 		);
-		expect(buildDeploymentChatsUrl("https://coder.test/#a")).toBe(
-			"https://coder.test/chats",
+		expect(buildDeploymentAgentsUrl("https://coder.test/#a")).toBe(
+			"https://coder.test/agents",
+		);
+	});
+});
+
+describe("renderDetailBlock", () => {
+	test("wraps a plain message in a 4-backtick fenced block", () => {
+		// Attacker-influenced strings flowing through `detail.message`
+		// must not break out of the markdown list context. The body now
+		// renders inside a 4-backtick fence.
+		const body = renderDetailBlock("plain message");
+		expect(body).toBe("- Detail:\n````\nplain message\n````");
+	});
+
+	test("neutralizes a markdown-injection attempt with backtick fences", () => {
+		// An adversarial chat.last_error containing a 3-backtick block
+		// would close the surrounding fence and inject markdown after.
+		// 4-backtick fences keep the 3-backtick content inside the code
+		// block.
+		const body = renderDetailBlock("````\nclose-then-inject\n````");
+		// The 4-backtick run inside the message is downgraded to 3 so
+		// the surrounding 4-backtick fence stays the only sequence that
+		// closes the block.
+		expect(body).toBe("- Detail:\n````\n```\nclose-then-inject\n```\n````");
+	});
+
+	test("strips control bytes other than newline and tab", () => {
+		// CR-only line endings or ANSI escapes flow through agent error
+		// wrappers; stripping them keeps the comment renderer
+		// predictable and avoids terminal-escape leakage if an operator
+		// pipes the comment body to a terminal.
+		const body = renderDetailBlock("a\u0000b\u0007c\nd\te");
+		expect(body).toBe("- Detail:\n````\nabc\nd\te\n````");
+	});
+
+	test("caps the message at DETAIL_BLOCK_MAX_CHARS", () => {
+		const body = renderDetailBlock("x".repeat(DETAIL_BLOCK_MAX_CHARS * 2));
+		// Header + fence open + cap + fence close + 3 newlines.
+		expect(body.length).toBe(
+			"- Detail:\n````\n".length + DETAIL_BLOCK_MAX_CHARS + "\n````".length,
 		);
 	});
 });
@@ -511,7 +491,7 @@ describe("findCommentByPredicate", () => {
 describe("buildSuccessCommentBody", () => {
 	const marker = "<!-- coder-agents-chat-action:owner/repo#123 -->";
 	const chatUrl =
-		"https://coder.test/chats/990e8400-e29b-41d4-a716-446655440000";
+		"https://coder.test/agents/990e8400-e29b-41d4-a716-446655440000";
 
 	test(
 		"wait=complete + completed body shows chat URL, status, PR URL, and " +
