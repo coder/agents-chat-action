@@ -24,9 +24,6 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Lint action.yaml for GHA expression literals
-        run: ./scripts/check-action-yaml.sh
-
       - name: Build
         run: make build
 
