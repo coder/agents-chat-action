@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Check action.yaml has no ${{ }} literals
+      - name: Lint action.yaml for GHA expression literals
         run: ./scripts/check-action-yaml.sh
 
       - name: Build
