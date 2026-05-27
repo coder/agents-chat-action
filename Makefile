@@ -14,7 +14,7 @@ lint:
 	bun run lint
 	bun run typecheck
 
-dist/index.js: $(TS_FILES) package.json node_modules
+dist/index.js: $(TS_FILES) package.json bun.lock node_modules
 	bun run build
 
 build: dist/index.js

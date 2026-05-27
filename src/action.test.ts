@@ -2428,13 +2428,13 @@ describe("CoderAgentChatAction", () => {
 		test("default + multiple non-archived matches: picks the most recent by updated_at and warns", async () => {
 			const older: CoderChat = {
 				...mockChat,
-				id: ChatIdSchema.parse("00000000-0000-0000-0000-000000000001"),
+				id: ChatIdSchema.parse("990e8400-e29b-41d4-a716-446655440001"),
 				updated_at: "2026-01-01T00:00:00.000000Z",
 				archived: false,
 			};
 			const newer: CoderChat = {
 				...mockChat,
-				id: ChatIdSchema.parse("00000000-0000-0000-0000-000000000002"),
+				id: ChatIdSchema.parse("990e8400-e29b-41d4-a716-446655440002"),
 				updated_at: "2026-02-01T00:00:00.000000Z",
 				archived: false,
 			};

@@ -4,14 +4,15 @@
 
 **Purpose**: GitHub Action that creates and manages Coder Agents chats for GitHub users with automated issue commenting support.
 
-**Key Difference from create-task-action**: This action targets the Coder Agents Chat API (`/api/experimental/chats`) instead of the Tasks API. Agents purposefully does NOT expose template selection — it either auto-provisions a workspace or uses an existing one.
+**Key Difference from create-task-action**: This action targets the Coder Agents Chat API (`/api/experimental/chats`) instead of the Tasks API. Agents purposefully does NOT expose template selection. It either auto-provisions a workspace or uses an existing one.
 
 **Tech Stack**:
-- **Runtime**: Bun (JavaScript/TypeScript runtime & bundler)
+- **Action Runtime**: Node 24
+- **Development Runtime**: Bun (JavaScript/TypeScript runtime & bundler)
 - **Language**: TypeScript with strict mode enabled
 - **Validation**: Zod for runtime schema validation
 - **Testing**: Bun's built-in test runner
-- **GitHub Integration**: @actions/core, @actions/github, @octokit/rest
+- **GitHub Integration**: @actions/core, @actions/github
 - **Formatting/Linting**: Biome
 
 ---
