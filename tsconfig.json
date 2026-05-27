@@ -6,7 +6,6 @@
 		"lib": ["ES2022"],
 		"types": ["bun-types"],
 		"strict": true,
-		"esModuleInterop": true,
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,
 		"resolveJsonModule": true,

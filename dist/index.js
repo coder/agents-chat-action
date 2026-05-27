@@ -36578,17 +36578,17 @@ class RealCoderClient {
     return parsed;
   }
 }
-var ChatIdSchema = exports_external.string().uuid().brand("ChatId");
+var ChatIdSchema = exports_external.uuid().brand("ChatId");
 var CoderSDKUserSchema = exports_external.object({
-  id: exports_external.string().uuid(),
+  id: exports_external.uuid(),
   username: exports_external.string(),
-  email: exports_external.string().email(),
-  organization_ids: exports_external.array(exports_external.string().uuid()),
+  email: exports_external.email(),
+  organization_ids: exports_external.array(exports_external.uuid()),
   github_com_user_id: exports_external.number().optional(),
   deleted: exports_external.boolean().optional()
 });
 var CoderOrganizationSchema = exports_external.object({
-  id: exports_external.string().uuid(),
+  id: exports_external.uuid(),
   name: exports_external.string(),
   display_name: exports_external.string().optional()
 });
@@ -36601,7 +36601,7 @@ var ChatStatusSchema = exports_external.enum([
   "error"
 ]);
 var ChatDiffStatusSchema = exports_external.object({
-  chat_id: exports_external.string().uuid(),
+  chat_id: exports_external.uuid(),
   url: exports_external.string().nullable().optional(),
   pull_request_state: exports_external.string().nullable().optional(),
   pull_request_title: exports_external.string().nullable().optional(),
@@ -36623,11 +36623,11 @@ var ChatDiffStatusSchema = exports_external.object({
 });
 var CoderChatSchema = exports_external.object({
   id: ChatIdSchema,
-  owner_id: exports_external.string().uuid(),
-  workspace_id: exports_external.string().uuid().nullable().optional(),
-  parent_chat_id: exports_external.string().uuid().nullable().optional(),
-  root_chat_id: exports_external.string().uuid().nullable().optional(),
-  last_model_config_id: exports_external.string().uuid().nullable().optional(),
+  owner_id: exports_external.uuid(),
+  workspace_id: exports_external.uuid().nullable().optional(),
+  parent_chat_id: exports_external.uuid().nullable().optional(),
+  root_chat_id: exports_external.uuid().nullable().optional(),
+  last_model_config_id: exports_external.uuid().nullable().optional(),
   title: exports_external.string(),
   status: ChatStatusSchema,
   last_error: exports_external.string().nullable().optional(),
@@ -36642,15 +36642,15 @@ var ChatInputPartSchema = exports_external.object({
   text: exports_external.string().min(1)
 });
 var CreateChatRequestSchema = exports_external.object({
-  organization_id: exports_external.string().uuid(),
+  organization_id: exports_external.uuid(),
   content: exports_external.array(ChatInputPartSchema).min(1),
-  workspace_id: exports_external.string().uuid().optional(),
-  model_config_id: exports_external.string().uuid().optional(),
+  workspace_id: exports_external.uuid().optional(),
+  model_config_id: exports_external.uuid().optional(),
   labels: exports_external.record(exports_external.string(), exports_external.string()).optional()
 });
 var CreateChatMessageRequestSchema = exports_external.object({
   content: exports_external.array(ChatInputPartSchema).min(1),
-  model_config_id: exports_external.string().uuid().optional()
+  model_config_id: exports_external.uuid().optional()
 });
 var CreateChatMessageResponseSchema = exports_external.object({
   queued: exports_external.boolean()
@@ -37425,13 +37425,13 @@ var DEFAULT_WAIT_TIMEOUT_SECONDS = 600;
 var ActionInputsObjectSchema = exports_external.object({
   chatPrompt: exports_external.string().min(1),
   coderToken: exports_external.string().min(1),
-  coderURL: exports_external.string().url(),
+  coderURL: exports_external.url(),
   coderOrganization: exports_external.string().min(1).optional(),
-  githubURL: exports_external.string().url(),
+  githubURL: exports_external.url(),
   githubToken: exports_external.string().min(1),
-  workspaceId: exports_external.string().uuid().optional(),
-  modelConfigId: exports_external.string().uuid().optional(),
-  existingChatId: exports_external.string().uuid().optional(),
+  workspaceId: exports_external.uuid().optional(),
+  modelConfigId: exports_external.uuid().optional(),
+  existingChatId: exports_external.uuid().optional(),
   commentOnIssue: exports_external.boolean().default(true),
   wait: exports_external.enum(["none", "complete"]).default("none"),
   waitTimeoutSeconds: exports_external.coerce.number().int().positive().default(DEFAULT_WAIT_TIMEOUT_SECONDS),
@@ -37450,12 +37450,12 @@ var ChatErrorKindSchema = exports_external.enum([
 ]);
 var ActionOutputsSchema = exports_external.object({
   coderUsername: exports_external.string(),
-  chatId: exports_external.string().uuid(),
-  chatUrl: exports_external.string().url(),
+  chatId: exports_external.uuid(),
+  chatUrl: exports_external.url(),
   chatCreated: exports_external.boolean(),
   chatStatus: exports_external.string().optional(),
   chatTitle: exports_external.string().optional(),
-  workspaceId: exports_external.string().uuid().optional(),
+  workspaceId: exports_external.uuid().optional(),
   pullRequestUrl: exports_external.string().optional(),
   pullRequestState: exports_external.string().optional(),
   pullRequestTitle: exports_external.string().optional(),

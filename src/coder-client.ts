@@ -166,17 +166,17 @@ export class RealCoderClient implements CoderClient {
 }
 
 // Branded types
-export const ChatIdSchema = z.string().uuid().brand("ChatId");
+export const ChatIdSchema = z.uuid().brand("ChatId");
 export type ChatId = z.infer<typeof ChatIdSchema>;
 
 // `deleted` is parsed leniently: `codersdk.User` does not currently
 // serialize it. The field is retained for forward compatibility with a
 // future server schema that exposes it.
 export const CoderSDKUserSchema = z.object({
-	id: z.string().uuid(),
+	id: z.uuid(),
 	username: z.string(),
-	email: z.string().email(),
-	organization_ids: z.array(z.string().uuid()),
+	email: z.email(),
+	organization_ids: z.array(z.uuid()),
 	github_com_user_id: z.number().optional(),
 	deleted: z.boolean().optional(),
 });
@@ -185,7 +185,7 @@ export type CoderSDKUser = z.infer<typeof CoderSDKUserSchema>;
 // Organization schema. Returned by `GET /api/v2/organizations/{name}` and
 // used to resolve the `coder-organization` input to a UUID for createChat.
 export const CoderOrganizationSchema = z.object({
-	id: z.string().uuid(),
+	id: z.uuid(),
 	name: z.string(),
 	display_name: z.string().optional(),
 });
@@ -204,7 +204,7 @@ export type ChatStatus = z.infer<typeof ChatStatusSchema>;
 
 // PR/branch metadata Agents tracks for a chat.
 export const ChatDiffStatusSchema = z.object({
-	chat_id: z.string().uuid(),
+	chat_id: z.uuid(),
 	url: z.string().nullable().optional(),
 	pull_request_state: z.string().nullable().optional(),
 	pull_request_title: z.string().nullable().optional(),
@@ -229,11 +229,11 @@ export type ChatDiffStatus = z.infer<typeof ChatDiffStatusSchema>;
 // Chat schema describes the full chat object returned by the API.
 export const CoderChatSchema = z.object({
 	id: ChatIdSchema,
-	owner_id: z.string().uuid(),
-	workspace_id: z.string().uuid().nullable().optional(),
-	parent_chat_id: z.string().uuid().nullable().optional(),
-	root_chat_id: z.string().uuid().nullable().optional(),
-	last_model_config_id: z.string().uuid().nullable().optional(),
+	owner_id: z.uuid(),
+	workspace_id: z.uuid().nullable().optional(),
+	parent_chat_id: z.uuid().nullable().optional(),
+	root_chat_id: z.uuid().nullable().optional(),
+	last_model_config_id: z.uuid().nullable().optional(),
 	title: z.string(),
 	status: ChatStatusSchema,
 	last_error: z.string().nullable().optional(),
@@ -257,10 +257,10 @@ export type ChatInputPart = z.infer<typeof ChatInputPartSchema>;
 // Create chat request. The chats API requires `organization_id` on every
 // create.
 export const CreateChatRequestSchema = z.object({
-	organization_id: z.string().uuid(),
+	organization_id: z.uuid(),
 	content: z.array(ChatInputPartSchema).min(1),
-	workspace_id: z.string().uuid().optional(),
-	model_config_id: z.string().uuid().optional(),
+	workspace_id: z.uuid().optional(),
+	model_config_id: z.uuid().optional(),
 	// Sent only when `idempotency-key` is provided. Platform key regex:
 	// `^[a-zA-Z0-9][a-zA-Z0-9._/-]*$`, max 50 entries.
 	labels: z.record(z.string(), z.string()).optional(),
@@ -270,7 +270,7 @@ export type CreateChatRequest = z.infer<typeof CreateChatRequestSchema>;
 // Create chat message request
 export const CreateChatMessageRequestSchema = z.object({
 	content: z.array(ChatInputPartSchema).min(1),
-	model_config_id: z.string().uuid().optional(),
+	model_config_id: z.uuid().optional(),
 });
 export type CreateChatMessageRequest = z.infer<
 	typeof CreateChatMessageRequestSchema
