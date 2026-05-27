@@ -4,7 +4,7 @@
 	"description": "GitHub Action to create and manage Coder Agents chats",
 	"main": "dist/index.js",
 	"scripts": {
-		"build": "bun build src/index.ts --outfile dist/index.js --target node --format cjs && perl -0pi -e 's/[ \\t]+\\n/\\n/g' dist/index.js",
+		"build": "bun build src/index.ts --outfile dist/index.js --target node --format cjs",
 		"dev": "bun run --watch src/index.ts",
 		"format": "biome format --write .",
 		"format:check": "biome format .",
