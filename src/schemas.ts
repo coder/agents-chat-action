@@ -7,13 +7,13 @@ export const DEFAULT_WAIT_TIMEOUT_SECONDS = 600;
 const ActionInputsObjectSchema = z.object({
 	chatPrompt: z.string().min(1),
 	coderToken: z.string().min(1),
-	coderURL: z.string().url(),
+	coderURL: z.url(),
 	coderOrganization: z.string().min(1).optional(),
-	githubURL: z.string().url(),
+	githubURL: z.url(),
 	githubToken: z.string().min(1),
-	workspaceId: z.string().uuid().optional(),
-	modelConfigId: z.string().uuid().optional(),
-	existingChatId: z.string().uuid().optional(),
+	workspaceId: z.uuid().optional(),
+	modelConfigId: z.uuid().optional(),
+	existingChatId: z.uuid().optional(),
 	commentOnIssue: z.boolean().default(true),
 	wait: z.enum(["none", "complete"]).default("none"),
 	waitTimeoutSeconds: z.coerce
@@ -49,12 +49,12 @@ export type ChatErrorKind = z.infer<typeof ChatErrorKindSchema>;
 // when the runtime path produces them.
 export const ActionOutputsSchema = z.object({
 	coderUsername: z.string(),
-	chatId: z.string().uuid(),
-	chatUrl: z.string().url(),
+	chatId: z.uuid(),
+	chatUrl: z.url(),
 	chatCreated: z.boolean(),
 	chatStatus: z.string().optional(),
 	chatTitle: z.string().optional(),
-	workspaceId: z.string().uuid().optional(),
+	workspaceId: z.uuid().optional(),
 	// Diff/PR metadata, populated when the chat has tracked changes.
 	pullRequestUrl: z.string().optional(),
 	pullRequestState: z.string().optional(),
