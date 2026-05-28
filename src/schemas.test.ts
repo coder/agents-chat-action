@@ -329,12 +329,10 @@ describe("CoderChatSchema", () => {
 		expect(result.diff_status?.pull_request_title).toBe("Fix issue #123");
 	});
 
-	test("parses a chat with diff_status null", () => {
-		const result = CoderChatSchema.parse({
-			...mockChat,
-			diff_status: null,
-		});
-		expect(result.diff_status).toBeNull();
+	test("parses a chat with diff_status absent", () => {
+		const { diff_status: _, ...chatWithoutDiff } = { ...mockChat };
+		const result = CoderChatSchema.parse(chatWithoutDiff);
+		expect(result.diff_status).toBeUndefined();
 	});
 
 	test("parses a chat with last_error populated", () => {

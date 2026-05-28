@@ -1,8 +1,15 @@
-.PHONY: fmt fmt-check lint test clean deps all
+.PHONY: fmt fmt-check lint test clean deps all gen
 
-TS_FILES := $(shell find src -name "*.ts" -type f ! -name "*.test.ts")
+TS_FILES := $(shell find src -name "*.ts" -type f ! -name "*.test.ts" ! -name "*.gen.ts")
 
-all: build fmt lint test
+all: gen build fmt lint test
+
+gen: src/codersdk.gen.ts
+
+src/codersdk.gen.ts: scripts/typegen/main.go scripts/typegen/zod.go scripts/typegen/go.mod
+	@cd scripts/typegen && go run . > ../../src/codersdk.gen.ts.tmp
+	@mv src/codersdk.gen.ts.tmp src/codersdk.gen.ts
+	@bun run format -- src/codersdk.gen.ts || true
 
 fmt:
 	bun run format
@@ -14,7 +21,7 @@ lint:
 	bun run lint
 	bun run typecheck
 
-dist/index.js: $(TS_FILES) package.json bun.lock node_modules
+dist/index.js: $(TS_FILES) src/codersdk.gen.ts package.json bun.lock node_modules
 	bun run build
 
 build: dist/index.js

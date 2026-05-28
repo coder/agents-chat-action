@@ -6,7 +6,7 @@ import type {
 	ChatStatus,
 	CoderChat,
 	CoderClient,
-	CoderSDKUser,
+	User,
 	CreateChatRequest,
 } from "./coder-client";
 import { ACTION_LABEL_KEYS, sanitizeLabelToken } from "./sanitize-label-token";
@@ -144,11 +144,8 @@ export class CoderAgentChatAction {
 	// (`GITHUB_WORKFLOW`-scoped unless `idempotency-key` is set).
 	//
 	// `hasPR` gates `pullRequestUrl` and the diff numerics so a chat with
-	// `diff_status` but no PR yet (`pr_number == null`) does not render a
-	// misleading comparison URL labelled "Pull request:" or "+0 additions"
-	// lines from the Zod-default zeros. `buildOutputs` intentionally
-	// diverges: it emits `diff?.url` unconditionally so callers can read a
-	// comparison URL when no PR exists yet.
+	// `diff_status` but no PR yet does not render a misleading comparison
+	// URL labelled "Pull request:" or "+0 additions" lines.
 	async commentOnIssue(args: {
 		chatUrl: string;
 		owner: string;
@@ -195,11 +192,7 @@ export class CoderAgentChatAction {
 		chatCreated: boolean,
 	): ActionOutputs {
 		const diff = chat.diff_status;
-		// Two nullish-handling patterns:
-		//   `?? undefined` for `.nullable().optional()` fields.
-		//   gated `hasPR ? ... : undefined` for `.default(0)` numerics, so
-		//     a chat with diff_status but no PR yet does not emit a
-		//     misleading truthy "0".
+		// `hasPR` prevents emitting numeric outputs when no PR exists.
 		const hasPR = diff?.pr_number != null;
 		return {
 			coderUsername,
@@ -400,7 +393,7 @@ export class CoderAgentChatAction {
 	 * `run()`'s `handleFailure` re-classifies the failure into the
 	 * failure-path comment.
 	 */
-	async resolveOrganizationID(user: CoderSDKUser): Promise<string> {
+	async resolveOrganizationID(user: User): Promise<string> {
 		if (this.inputs.coderOrganization) {
 			core.info(
 				`Resolving Coder organization by name: ${this.inputs.coderOrganization}`,
