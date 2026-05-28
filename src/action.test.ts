@@ -441,9 +441,9 @@ describe("CoderAgentChatAction", () => {
 			expect(out.baseBranch).toBe("main");
 		});
 
-		test("converts null pull_request_title to undefined", () => {
-			// pull_request_title is .nullable().optional(); explicit null
-			// from the API maps to undefined so the output is unset.
+		test("converts empty pull_request_title to empty string", () => {
+			// pull_request_title is always a string from the API;
+			// an empty string passes through as-is.
 			const inputs = createMockInputs();
 			const action = new CoderAgentChatAction(
 				coderClient,
@@ -454,18 +454,18 @@ describe("CoderAgentChatAction", () => {
 			if (!diff) {
 				throw new Error("mockChatWithDiff must have diff_status set");
 			}
-			const chatWithNullTitle: typeof mockChatWithDiff = {
+			const chatWithEmptyTitle: typeof mockChatWithDiff = {
 				...mockChatWithDiff,
-				diff_status: { ...diff, pull_request_title: null },
+				diff_status: { ...diff, pull_request_title: "" },
 			};
 
 			const out = action.buildOutputs(
 				mockUser.username,
-				chatWithNullTitle,
+				chatWithEmptyTitle,
 				false,
 			);
 
-			expect(out.pullRequestTitle).toBeUndefined();
+			expect(out.pullRequestTitle).toBe("");
 		});
 
 		test("emits zero numerics when a PR exists", () => {
@@ -570,7 +570,7 @@ describe("CoderAgentChatAction", () => {
 			const chatWithError: typeof mockChat = {
 				...mockChat,
 				status: "error",
-				last_error: "spend cap reached",
+				last_error: { message: "spend cap reached", retryable: false },
 			};
 
 			const out = action.buildOutputs(mockUser.username, chatWithError, true);
@@ -919,7 +919,7 @@ describe("CoderAgentChatAction", () => {
 				.mockResolvedValueOnce({
 					...mockChat,
 					status: "error",
-					last_error: "Anthropic 429 rate limit",
+					last_error: { message: "Anthropic 429 rate limit", retryable: true },
 				});
 
 			const inputs = createMockInputs({
@@ -1413,7 +1413,7 @@ describe("CoderAgentChatAction", () => {
 				.mockResolvedValueOnce({
 					...mockChat,
 					status: "error",
-					last_error: "agent crashed",
+					last_error: { message: "agent crashed", retryable: false },
 				});
 
 			const existingChatId = "990e8400-e29b-41d4-a716-446655440000";

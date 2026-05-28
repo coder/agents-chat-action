@@ -341,8 +341,8 @@ describe("CoderChatSchema", () => {
 		const result = CoderChatSchema.parse({
 			...mockChat,
 			status: "error",
-			last_error: "spend cap reached",
+			last_error: { message: "spend cap reached", retryable: false },
 		});
-		expect(result.last_error).toBe("spend cap reached");
+		expect(result.last_error?.message).toBe("spend cap reached");
 	});
 });

@@ -199,6 +199,7 @@ export const ChatStatusSchema = z.enum([
 	"paused",
 	"completed",
 	"error",
+	"requires_action",
 ]);
 export type ChatStatus = z.infer<typeof ChatStatusSchema>;
 
@@ -207,7 +208,7 @@ export const ChatDiffStatusSchema = z.object({
 	chat_id: z.uuid(),
 	url: z.string().nullable().optional(),
 	pull_request_state: z.string().nullable().optional(),
-	pull_request_title: z.string().nullable().optional(),
+	pull_request_title: z.string(),
 	pull_request_draft: z.boolean().default(false),
 	changes_requested: z.boolean().default(false),
 	additions: z.number().default(0),
@@ -226,6 +227,17 @@ export const ChatDiffStatusSchema = z.object({
 });
 export type ChatDiffStatus = z.infer<typeof ChatDiffStatusSchema>;
 
+// Structured error returned by the Coder API when a chat fails.
+export const ChatErrorSchema = z.object({
+	message: z.string(),
+	detail: z.string().optional(),
+	kind: z.string().optional(),
+	provider: z.string().optional(),
+	retryable: z.boolean(),
+	status_code: z.number().optional(),
+});
+export type ChatError = z.infer<typeof ChatErrorSchema>;
+
 // Chat schema describes the full chat object returned by the API.
 export const CoderChatSchema = z.object({
 	id: ChatIdSchema,
@@ -233,14 +245,14 @@ export const CoderChatSchema = z.object({
 	workspace_id: z.uuid().nullable().optional(),
 	parent_chat_id: z.uuid().nullable().optional(),
 	root_chat_id: z.uuid().nullable().optional(),
-	last_model_config_id: z.uuid().nullable().optional(),
+	last_model_config_id: z.uuid(),
 	title: z.string(),
 	status: ChatStatusSchema,
-	last_error: z.string().nullable().optional(),
+	last_error: ChatErrorSchema.nullable().optional(),
 	diff_status: ChatDiffStatusSchema.nullable().optional(),
 	created_at: z.string(),
 	updated_at: z.string(),
-	archived: z.boolean().nullable().optional(),
+	archived: z.boolean(),
 });
 export type CoderChat = z.infer<typeof CoderChatSchema>;
 

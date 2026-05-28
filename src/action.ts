@@ -218,7 +218,7 @@ export class CoderAgentChatAction {
 			changedFiles: hasPR ? diff?.changed_files : undefined,
 			headBranch: diff?.head_branch ?? undefined,
 			baseBranch: diff?.base_branch ?? undefined,
-			chatErrorMessage: chat.last_error ?? undefined,
+			chatErrorMessage: chat.last_error?.message ?? undefined,
 		};
 	}
 
@@ -337,7 +337,7 @@ export class CoderAgentChatAction {
 	 */
 	private throwOnChatError(chat: CoderChat): CoderChat {
 		if (chat.status === "error") {
-			const message = chat.last_error || "Chat ended in error state";
+			const message = chat.last_error?.message || "Chat ended in error state";
 			throw new ActionFailureError("api_error", message, chat);
 		}
 		return chat;
