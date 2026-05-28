@@ -509,14 +509,14 @@ describe("CoderAgentChatAction", () => {
 			if (!diff) {
 				throw new Error("mockChatWithDiff must have diff_status set");
 			}
-			// diff_status present but no PR yet: url null, pr_number null.
+			// diff_status present but no PR yet: url and pr_number absent.
 			// The Zod .default(0) numerics would otherwise leak as "0".
 			const noPRYet: typeof mockChatWithDiff = {
 				...mockChatWithDiff,
 				diff_status: {
 					...diff,
-					url: null,
-					pr_number: null,
+					url: undefined,
+					pr_number: undefined,
 				},
 			};
 
@@ -527,7 +527,7 @@ describe("CoderAgentChatAction", () => {
 			expect(out.changedFiles).toBeUndefined();
 		});
 
-		test("skips numerics for a branch-only chat (url set, pr_number null)", () => {
+		test("skips numerics for a branch-only chat (url set, pr_number absent)", () => {
 			const inputs = createMockInputs();
 			const action = new CoderAgentChatAction(
 				coderClient,
@@ -546,7 +546,7 @@ describe("CoderAgentChatAction", () => {
 				diff_status: {
 					...diff,
 					url: "https://github.com/test-org/test-repo/compare/main...fix/issue-123",
-					pr_number: null,
+					pr_number: undefined,
 				},
 			};
 
@@ -1129,7 +1129,7 @@ describe("CoderAgentChatAction", () => {
 			coderClient.mockGetChat.mockResolvedValueOnce({
 				...mockChat,
 				status: "error",
-				last_error: null,
+				last_error: undefined,
 			});
 
 			const inputs = createMockInputs({

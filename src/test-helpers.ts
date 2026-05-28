@@ -5,9 +5,9 @@ import {
 	ChatIdSchema,
 } from "./coder-client";
 import type {
-	CoderSDKUser,
+	User,
 	CoderChat,
-	CoderOrganization,
+	Organization,
 	CreateChatRequest,
 	CreateChatMessageRequest,
 	CreateChatMessageResponse,
@@ -39,16 +39,21 @@ export function createFakeClock(): Clock & { sleeps: number[] } {
 /**
  * Mock data for tests
  */
-export const mockUser: CoderSDKUser = {
+export const mockUser: User = {
 	id: "550e8400-e29b-41d4-a716-446655440000",
 	username: "testuser",
 	email: "test@example.com",
 	organization_ids: ["660e8400-e29b-41d4-a716-446655440000"],
-	github_com_user_id: 12345,
+	status: "active",
+	login_type: "password",
+	created_at: "2026-01-01T00:00:00Z",
+	updated_at: "2026-01-01T00:00:00Z",
+	roles: [],
+	has_ai_seat: true,
 };
 
 // User with no organization memberships.
-export const mockUserNoOrgs: CoderSDKUser = {
+export const mockUserNoOrgs: User = {
 	...mockUser,
 	organization_ids: [],
 };
@@ -56,26 +61,39 @@ export const mockUserNoOrgs: CoderSDKUser = {
 // Default organization fixture. The id is intentionally distinct from
 // `mockUser.organization_ids[0]` so org-resolution tests can prove which path
 // produced the value rather than relying on mock-call assertions alone.
-export const mockOrganization: CoderOrganization = {
+export const mockOrganization: Organization = {
 	id: "cc0e8400-e29b-41d4-a716-446655440000",
 	name: "coder",
 	display_name: "Coder",
+	icon: "",
+	description: "",
+	created_at: "2026-01-01T00:00:00Z",
+	updated_at: "2026-01-01T00:00:00Z",
+	is_default: true,
 };
 
 export const mockChat: CoderChat = {
 	id: ChatIdSchema.parse("990e8400-e29b-41d4-a716-446655440000"),
+	organization_id: "660e8400-e29b-41d4-a716-446655440000",
 	owner_id: "550e8400-e29b-41d4-a716-446655440000",
 	workspace_id: "aa0e8400-e29b-41d4-a716-446655440000",
-	parent_chat_id: null,
-	root_chat_id: null,
+	parent_chat_id: undefined,
+	root_chat_id: undefined,
 	last_model_config_id: "bb0e8400-e29b-41d4-a716-446655440000",
 	title: "Test chat",
 	status: "running",
-	last_error: null,
-	diff_status: null,
+	last_error: undefined,
+	last_turn_summary: null,
+	diff_status: undefined,
 	created_at: "2024-01-01T00:00:00Z",
 	updated_at: "2024-01-01T00:00:00Z",
 	archived: false,
+	pin_order: 0,
+	mcp_server_ids: [],
+	labels: null,
+	has_unread: false,
+	client_type: "api",
+	children: [],
 };
 
 export const mockChatWithDiff: CoderChat = {
@@ -92,7 +110,7 @@ export const mockChatWithDiff: CoderChat = {
 		deletions: 10,
 		changed_files: 3,
 		author_login: "testuser",
-		author_avatar_url: null,
+		author_avatar_url: undefined,
 		base_branch: "main",
 		head_branch: "fix/issue-123",
 		pr_number: 42,
@@ -100,7 +118,7 @@ export const mockChatWithDiff: CoderChat = {
 		approved: false,
 		reviewer_count: 0,
 		refreshed_at: "2024-01-01T01:00:00Z",
-		stale_at: null,
+		stale_at: undefined,
 	},
 };
 
@@ -144,11 +162,11 @@ export class MockCoderClient implements CoderClient {
 	);
 	public mockGetAuthenticatedUser = mock(() => Promise.resolve(mockUser));
 
-	async getAuthenticatedUser(): Promise<CoderSDKUser> {
+	async getAuthenticatedUser(): Promise<User> {
 		return this.mockGetAuthenticatedUser();
 	}
 
-	async getOrganizationByName(name: string): Promise<CoderOrganization> {
+	async getOrganizationByName(name: string): Promise<Organization> {
 		return this.mockGetOrganizationByName(name);
 	}
 

@@ -36490,8 +36490,193 @@ function normalizeBaseUrl(coderURL) {
   return coderURL.split(/[?#]/)[0].replace(/\/$/, "");
 }
 
+// src/codersdk.gen.ts
+var ChatClientTypeSchema = exports_external.enum(["api", "ui"]);
+var ChatDiffStatusSchema = exports_external.object({
+  chat_id: exports_external.string(),
+  url: exports_external.string().optional(),
+  pull_request_state: exports_external.string().optional(),
+  pull_request_title: exports_external.string(),
+  pull_request_draft: exports_external.boolean(),
+  changes_requested: exports_external.boolean(),
+  additions: exports_external.number(),
+  deletions: exports_external.number(),
+  changed_files: exports_external.number(),
+  author_login: exports_external.string().optional(),
+  author_avatar_url: exports_external.string().optional(),
+  base_branch: exports_external.string().optional(),
+  head_branch: exports_external.string().optional(),
+  pr_number: exports_external.number().optional(),
+  commits: exports_external.number().optional(),
+  approved: exports_external.boolean().optional(),
+  reviewer_count: exports_external.number().optional(),
+  refreshed_at: exports_external.string().optional(),
+  stale_at: exports_external.string().optional()
+});
+var ChatErrorKindSchema = exports_external.enum([
+  "auth",
+  "config",
+  "generic",
+  "overloaded",
+  "rate_limit",
+  "startup_timeout",
+  "timeout",
+  "usage_limit"
+]);
+var ChatErrorSchema = exports_external.object({
+  message: exports_external.string(),
+  detail: exports_external.string().optional(),
+  kind: ChatErrorKindSchema.optional(),
+  provider: exports_external.string().optional(),
+  retryable: exports_external.boolean(),
+  status_code: exports_external.number().optional()
+});
+var ChatFileMetadataSchema = exports_external.object({
+  id: exports_external.string(),
+  owner_id: exports_external.string(),
+  organization_id: exports_external.string(),
+  name: exports_external.string(),
+  mime_type: exports_external.string(),
+  created_at: exports_external.string()
+});
+var ChatPlanModeSchema = exports_external.enum(["plan"]);
+var ChatStatusSchema = exports_external.enum([
+  "completed",
+  "error",
+  "paused",
+  "pending",
+  "requires_action",
+  "running",
+  "waiting"
+]);
+var ChatSchema = exports_external.object({
+  id: exports_external.string(),
+  organization_id: exports_external.string(),
+  owner_id: exports_external.string(),
+  owner_username: exports_external.string().optional(),
+  owner_name: exports_external.string().optional(),
+  workspace_id: exports_external.string().optional(),
+  build_id: exports_external.string().optional(),
+  agent_id: exports_external.string().optional(),
+  parent_chat_id: exports_external.string().optional(),
+  root_chat_id: exports_external.string().optional(),
+  last_model_config_id: exports_external.string(),
+  title: exports_external.string(),
+  status: ChatStatusSchema,
+  plan_mode: ChatPlanModeSchema.optional(),
+  last_error: ChatErrorSchema.optional(),
+  last_turn_summary: exports_external.string().nullable(),
+  diff_status: ChatDiffStatusSchema.optional(),
+  created_at: exports_external.string(),
+  updated_at: exports_external.string(),
+  archived: exports_external.boolean(),
+  pin_order: exports_external.number(),
+  mcp_server_ids: exports_external.array(exports_external.string()),
+  labels: exports_external.record(exports_external.string(), exports_external.string()).nullable(),
+  files: exports_external.array(ChatFileMetadataSchema).optional(),
+  has_unread: exports_external.boolean(),
+  last_injected_context: exports_external.array(exports_external.unknown()).optional(),
+  warnings: exports_external.array(exports_external.string()).optional(),
+  client_type: ChatClientTypeSchema,
+  children: exports_external.array(exports_external.lazy(() => ChatSchema))
+});
+var ChatBusyBehaviorSchema = exports_external.enum(["interrupt", "queue"]);
+var ChatInputPartTypeSchema = exports_external.enum([
+  "file",
+  "file-reference",
+  "text"
+]);
+var ChatInputPartSchema = exports_external.object({
+  type: ChatInputPartTypeSchema,
+  text: exports_external.string().optional(),
+  file_id: exports_external.string().optional(),
+  file_name: exports_external.string().optional(),
+  start_line: exports_external.number().optional(),
+  end_line: exports_external.number().optional(),
+  content: exports_external.string().optional()
+});
+var CreateChatMessageRequestSchema = exports_external.object({
+  content: exports_external.array(ChatInputPartSchema),
+  model_config_id: exports_external.string().optional(),
+  mcp_server_ids: exports_external.array(exports_external.string()).optional(),
+  busy_behavior: ChatBusyBehaviorSchema.optional(),
+  plan_mode: ChatPlanModeSchema.optional()
+});
+var DynamicToolSchema = exports_external.object({
+  name: exports_external.string(),
+  description: exports_external.string().optional(),
+  input_schema: exports_external.unknown()
+});
+var CreateChatRequestSchema = exports_external.object({
+  organization_id: exports_external.string(),
+  content: exports_external.array(ChatInputPartSchema),
+  system_prompt: exports_external.string().optional(),
+  workspace_id: exports_external.string().optional(),
+  model_config_id: exports_external.string().optional(),
+  mcp_server_ids: exports_external.array(exports_external.string()).optional(),
+  labels: exports_external.record(exports_external.string(), exports_external.string()).optional(),
+  unsafe_dynamic_tools: exports_external.array(DynamicToolSchema).optional(),
+  plan_mode: ChatPlanModeSchema.optional(),
+  client_type: ChatClientTypeSchema.optional()
+});
+var LoginTypeSchema = exports_external.enum([
+  "github",
+  "none",
+  "oidc",
+  "password",
+  "token",
+  ""
+]);
+var MinimalOrganizationSchema = exports_external.object({
+  id: exports_external.string(),
+  name: exports_external.string(),
+  display_name: exports_external.string(),
+  icon: exports_external.string()
+});
+var MinimalUserSchema = exports_external.object({
+  id: exports_external.string(),
+  username: exports_external.string(),
+  name: exports_external.string().optional(),
+  avatar_url: exports_external.string().optional()
+});
+var OrganizationSchema = MinimalOrganizationSchema.extend({
+  description: exports_external.string(),
+  created_at: exports_external.string(),
+  updated_at: exports_external.string(),
+  is_default: exports_external.boolean()
+});
+var UserStatusSchema = exports_external.enum(["active", "dormant", "suspended"]);
+var ReducedUserSchema = MinimalUserSchema.extend({
+  email: exports_external.string(),
+  created_at: exports_external.string(),
+  updated_at: exports_external.string(),
+  last_seen_at: exports_external.string().optional(),
+  status: UserStatusSchema,
+  login_type: LoginTypeSchema,
+  is_service_account: exports_external.boolean().optional(),
+  theme_preference: exports_external.string().optional()
+});
+var SlimRoleSchema = exports_external.object({
+  name: exports_external.string(),
+  display_name: exports_external.string(),
+  organization_id: exports_external.string().optional()
+});
+var UserSchema = ReducedUserSchema.extend({
+  organization_ids: exports_external.array(exports_external.string()),
+  roles: exports_external.array(SlimRoleSchema),
+  has_ai_seat: exports_external.boolean()
+});
+
 // src/coder-client.ts
+var CreateChatMessageResponseSchema = exports_external.object({
+  queued: exports_external.boolean()
+});
 var DEFAULT_REQUEST_TIMEOUT_MS = 30000;
+var ChatIdSchema = exports_external.uuid().brand("ChatId");
+var CoderChatSchema = ChatSchema.extend({
+  id: ChatIdSchema
+});
+var CoderChatListResponseSchema = exports_external.array(CoderChatSchema);
 
 class RealCoderClient {
   serverURL;
@@ -36529,7 +36714,7 @@ class RealCoderClient {
   }
   async getAuthenticatedUser() {
     const response = await this.request("/api/v2/users/me");
-    return CoderSDKUserSchema.parse(response);
+    return UserSchema.parse(response);
   }
   async getOrganizationByName(name) {
     if (!name) {
@@ -36537,7 +36722,7 @@ class RealCoderClient {
     }
     const endpoint2 = `/api/v2/organizations/${encodeURIComponent(name)}`;
     const response = await this.request(endpoint2);
-    return CoderOrganizationSchema.parse(response);
+    return OrganizationSchema.parse(response);
   }
   async createChat(params) {
     const endpoint2 = "/api/experimental/chats";
@@ -36578,92 +36763,6 @@ class RealCoderClient {
     return parsed;
   }
 }
-var ChatIdSchema = exports_external.uuid().brand("ChatId");
-var CoderSDKUserSchema = exports_external.object({
-  id: exports_external.uuid(),
-  username: exports_external.string(),
-  email: exports_external.email(),
-  organization_ids: exports_external.array(exports_external.uuid()),
-  github_com_user_id: exports_external.number().optional(),
-  deleted: exports_external.boolean().optional()
-});
-var CoderOrganizationSchema = exports_external.object({
-  id: exports_external.uuid(),
-  name: exports_external.string(),
-  display_name: exports_external.string().optional()
-});
-var ChatStatusSchema = exports_external.enum([
-  "waiting",
-  "pending",
-  "running",
-  "paused",
-  "completed",
-  "error",
-  "requires_action"
-]);
-var ChatDiffStatusSchema = exports_external.object({
-  chat_id: exports_external.uuid(),
-  url: exports_external.string().nullable().optional(),
-  pull_request_state: exports_external.string().nullable().optional(),
-  pull_request_title: exports_external.string(),
-  pull_request_draft: exports_external.boolean().default(false),
-  changes_requested: exports_external.boolean().default(false),
-  additions: exports_external.number().default(0),
-  deletions: exports_external.number().default(0),
-  changed_files: exports_external.number().default(0),
-  author_login: exports_external.string().nullable().optional(),
-  author_avatar_url: exports_external.string().nullable().optional(),
-  base_branch: exports_external.string().nullable().optional(),
-  head_branch: exports_external.string().nullable().optional(),
-  pr_number: exports_external.number().nullable().optional(),
-  commits: exports_external.number().nullable().optional(),
-  approved: exports_external.boolean().nullable().optional(),
-  reviewer_count: exports_external.number().nullable().optional(),
-  refreshed_at: exports_external.string().nullable().optional(),
-  stale_at: exports_external.string().nullable().optional()
-});
-var ChatErrorSchema = exports_external.object({
-  message: exports_external.string(),
-  detail: exports_external.string().optional(),
-  kind: exports_external.string().optional(),
-  provider: exports_external.string().optional(),
-  retryable: exports_external.boolean(),
-  status_code: exports_external.number().optional()
-});
-var CoderChatSchema = exports_external.object({
-  id: ChatIdSchema,
-  owner_id: exports_external.uuid(),
-  workspace_id: exports_external.uuid().nullable().optional(),
-  parent_chat_id: exports_external.uuid().nullable().optional(),
-  root_chat_id: exports_external.uuid().nullable().optional(),
-  last_model_config_id: exports_external.uuid(),
-  title: exports_external.string(),
-  status: ChatStatusSchema,
-  last_error: ChatErrorSchema.nullable().optional(),
-  diff_status: ChatDiffStatusSchema.nullable().optional(),
-  created_at: exports_external.string(),
-  updated_at: exports_external.string(),
-  archived: exports_external.boolean()
-});
-var CoderChatListResponseSchema = exports_external.array(CoderChatSchema);
-var ChatInputPartSchema = exports_external.object({
-  type: exports_external.literal("text"),
-  text: exports_external.string().min(1)
-});
-var CreateChatRequestSchema = exports_external.object({
-  organization_id: exports_external.uuid(),
-  content: exports_external.array(ChatInputPartSchema).min(1),
-  workspace_id: exports_external.uuid().optional(),
-  model_config_id: exports_external.uuid().optional(),
-  labels: exports_external.record(exports_external.string(), exports_external.string()).optional()
-});
-var CreateChatMessageRequestSchema = exports_external.object({
-  content: exports_external.array(ChatInputPartSchema).min(1),
-  model_config_id: exports_external.uuid().optional()
-});
-var CreateChatMessageResponseSchema = exports_external.object({
-  queued: exports_external.boolean()
-});
 
 class CoderAPIError extends Error {
   statusCode;
@@ -37451,7 +37550,7 @@ var ActionInputsSchema = ActionInputsObjectSchema.refine((data) => !(data.existi
   message: "Cannot set both existing-chat-id and force-new-chat; choose one.",
   path: ["forceNewChat"]
 });
-var ChatErrorKindSchema = exports_external.enum([
+var ChatErrorKindSchema2 = exports_external.enum([
   "spend_exceeded",
   "org_not_found",
   "api_error",
@@ -37474,7 +37573,7 @@ var ActionOutputsSchema = exports_external.object({
   changedFiles: exports_external.number().optional(),
   headBranch: exports_external.string().optional(),
   baseBranch: exports_external.string().optional(),
-  chatErrorKind: ChatErrorKindSchema.optional(),
+  chatErrorKind: ChatErrorKindSchema2.optional(),
   chatErrorMessage: exports_external.string().optional()
 });
 
