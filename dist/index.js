@@ -36598,13 +36598,14 @@ var ChatStatusSchema = exports_external.enum([
   "running",
   "paused",
   "completed",
-  "error"
+  "error",
+  "requires_action"
 ]);
 var ChatDiffStatusSchema = exports_external.object({
   chat_id: exports_external.uuid(),
   url: exports_external.string().nullable().optional(),
   pull_request_state: exports_external.string().nullable().optional(),
-  pull_request_title: exports_external.string().nullable().optional(),
+  pull_request_title: exports_external.string(),
   pull_request_draft: exports_external.boolean().default(false),
   changes_requested: exports_external.boolean().default(false),
   additions: exports_external.number().default(0),
@@ -36621,20 +36622,28 @@ var ChatDiffStatusSchema = exports_external.object({
   refreshed_at: exports_external.string().nullable().optional(),
   stale_at: exports_external.string().nullable().optional()
 });
+var ChatErrorSchema = exports_external.object({
+  message: exports_external.string(),
+  detail: exports_external.string().optional(),
+  kind: exports_external.string().optional(),
+  provider: exports_external.string().optional(),
+  retryable: exports_external.boolean(),
+  status_code: exports_external.number().optional()
+});
 var CoderChatSchema = exports_external.object({
   id: ChatIdSchema,
   owner_id: exports_external.uuid(),
   workspace_id: exports_external.uuid().nullable().optional(),
   parent_chat_id: exports_external.uuid().nullable().optional(),
   root_chat_id: exports_external.uuid().nullable().optional(),
-  last_model_config_id: exports_external.uuid().nullable().optional(),
+  last_model_config_id: exports_external.uuid(),
   title: exports_external.string(),
   status: ChatStatusSchema,
-  last_error: exports_external.string().nullable().optional(),
+  last_error: ChatErrorSchema.nullable().optional(),
   diff_status: ChatDiffStatusSchema.nullable().optional(),
   created_at: exports_external.string(),
   updated_at: exports_external.string(),
-  archived: exports_external.boolean().nullable().optional()
+  archived: exports_external.boolean()
 });
 var CoderChatListResponseSchema = exports_external.array(CoderChatSchema);
 var ChatInputPartSchema = exports_external.object({
@@ -37047,7 +37056,7 @@ class CoderAgentChatAction {
       changedFiles: hasPR ? diff?.changed_files : undefined,
       headBranch: diff?.head_branch ?? undefined,
       baseBranch: diff?.base_branch ?? undefined,
-      chatErrorMessage: chat.last_error ?? undefined
+      chatErrorMessage: chat.last_error?.message ?? undefined
     };
   }
   async waitForTerminal(chatId, options = {}) {
@@ -37100,7 +37109,7 @@ class CoderAgentChatAction {
   }
   throwOnChatError(chat) {
     if (chat.status === "error") {
-      const message = chat.last_error || "Chat ended in error state";
+      const message = chat.last_error?.message || "Chat ended in error state";
       throw new ActionFailureError("api_error", message, chat);
     }
     return chat;
