@@ -11,7 +11,7 @@ require (
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coder/coder/v2 v2.34.0-rc.0.0.20260528065010-cfa343e45666 // indirect
-	github.com/coder/guts v1.7.0 // indirect
+	github.com/coder/guts v1.7.1-0.20260529230818-2f30faf483eb // indirect
 	github.com/coder/pretty v0.0.0-20230908205945-e89ba86370e0 // indirect
 	github.com/coder/serpent v0.15.0 // indirect
 	github.com/coder/websocket v1.8.14 // indirect

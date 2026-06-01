@@ -6,7 +6,7 @@ all: gen build fmt lint test
 
 gen: src/codersdk.gen.ts
 
-src/codersdk.gen.ts: scripts/typegen/main.go scripts/typegen/zod.go scripts/typegen/go.mod
+src/codersdk.gen.ts: scripts/typegen/main.go scripts/typegen/go.mod
 	@cd scripts/typegen && go run . > ../../src/codersdk.gen.ts.tmp
 	@mv src/codersdk.gen.ts.tmp src/codersdk.gen.ts
 	@bun run format -- src/codersdk.gen.ts || true
