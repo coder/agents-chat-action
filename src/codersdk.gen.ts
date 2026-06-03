@@ -2,6 +2,10 @@
 
 import { z } from "zod";
 
+export const ChatBusyBehaviorSchema = z.enum(["interrupt", "queue"]);
+
+export type ChatBusyBehavior = z.infer<typeof ChatBusyBehaviorSchema>;
+
 export const ChatClientTypeSchema = z.enum(["api", "ui"]);
 
 export type ChatClientType = z.infer<typeof ChatClientTypeSchema>;
@@ -65,6 +69,26 @@ export const ChatFileMetadataSchema = z.object({
 
 export type ChatFileMetadata = z.infer<typeof ChatFileMetadataSchema>;
 
+export const ChatInputPartTypeSchema = z.enum([
+	"file",
+	"file-reference",
+	"text",
+]);
+
+export type ChatInputPartType = z.infer<typeof ChatInputPartTypeSchema>;
+
+export const ChatInputPartSchema = z.object({
+	type: ChatInputPartTypeSchema,
+	text: z.string().optional(),
+	file_id: z.string().optional(),
+	file_name: z.string().optional(),
+	start_line: z.number().optional(),
+	end_line: z.number().optional(),
+	content: z.string().optional(),
+});
+
+export type ChatInputPart = z.infer<typeof ChatInputPartSchema>;
+
 export const ChatPlanModeSchema = z.enum(["plan"]);
 
 export type ChatPlanMode = z.infer<typeof ChatPlanModeSchema>;
@@ -114,30 +138,6 @@ export const ChatSchema = z.object({
 });
 
 export type Chat = z.infer<typeof ChatSchema>;
-
-export const ChatBusyBehaviorSchema = z.enum(["interrupt", "queue"]);
-
-export type ChatBusyBehavior = z.infer<typeof ChatBusyBehaviorSchema>;
-
-export const ChatInputPartTypeSchema = z.enum([
-	"file",
-	"file-reference",
-	"text",
-]);
-
-export type ChatInputPartType = z.infer<typeof ChatInputPartTypeSchema>;
-
-export const ChatInputPartSchema = z.object({
-	type: ChatInputPartTypeSchema,
-	text: z.string().optional(),
-	file_id: z.string().optional(),
-	file_name: z.string().optional(),
-	start_line: z.number().optional(),
-	end_line: z.number().optional(),
-	content: z.string().optional(),
-});
-
-export type ChatInputPart = z.infer<typeof ChatInputPartSchema>;
 
 export const CreateChatMessageRequestSchema = z.object({
 	content: z.array(ChatInputPartSchema),
@@ -212,6 +212,14 @@ export const OrganizationSchema = MinimalOrganizationSchema.extend({
 
 export type Organization = z.infer<typeof OrganizationSchema>;
 
+export const SlimRoleSchema = z.object({
+	name: z.string(),
+	display_name: z.string(),
+	organization_id: z.string().optional(),
+});
+
+export type SlimRole = z.infer<typeof SlimRoleSchema>;
+
 export const UserStatusSchema = z.enum(["active", "dormant", "suspended"]);
 
 export type UserStatus = z.infer<typeof UserStatusSchema>;
@@ -228,14 +236,6 @@ export const ReducedUserSchema = MinimalUserSchema.extend({
 });
 
 export type ReducedUser = z.infer<typeof ReducedUserSchema>;
-
-export const SlimRoleSchema = z.object({
-	name: z.string(),
-	display_name: z.string(),
-	organization_id: z.string().optional(),
-});
-
-export type SlimRole = z.infer<typeof SlimRoleSchema>;
 
 export const UserSchema = ReducedUserSchema.extend({
 	organization_ids: z.array(z.string()),

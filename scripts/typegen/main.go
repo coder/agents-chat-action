@@ -9,14 +9,15 @@ package main
 import (
 	"fmt"
 	"log"
-	"maps"
 	"os"
-	"slices"
+	"strings"
 
 	"github.com/coder/guts"
 	"github.com/coder/guts/bindings"
+	"github.com/coder/guts/bindings/walk"
 	"github.com/coder/guts/config"
-	"github.com/coder/guts/zod"
+
+	"github.com/coder/agents-chat-action/scripts/typegen/zod"
 )
 
 // Types the action needs from the Coder API. Only root types that
@@ -69,14 +70,17 @@ func main() {
 		config.SimplifyOmitEmpty,
 	)
 
-	// Compute wanted types and dependency order before Zod
-	// rewrites the AST (collectRefs works on Interface/Alias).
+	// Compute wanted types before Zod rewrites the AST
+	// (collectRefs works on Interface/Alias).
 	allNodes := make(map[string]bindings.Node)
 	ts.ForEach(func(name string, node bindings.Node) {
 		allNodes[name] = node
 	})
 	included := resolveTransitive(allNodes, wantedTypes)
-	order := topoSort(included)
+	wantedNames := make(map[string]bool, len(included))
+	for name := range included {
+		wantedNames[name] = true
+	}
 
 	// Rewrite Interface/Alias into Zod schemas, then export.
 	ts.ApplyMutations(
@@ -84,19 +88,17 @@ func main() {
 		config.ExportTypes,
 	)
 
+	// Serialize only the wanted types, sorted by dependencies.
 	output, err := ts.SerializeInOrder(func(nodes map[string]bindings.Node) []bindings.Node {
-		var result []bindings.Node
-		for _, name := range order {
-			// AsSchemas creates FooSchema (VariableStatement) and
-			// Foo (Alias with z.infer<typeof FooSchema>).
-			if schema, ok := nodes[name+"Schema"]; ok {
-				result = append(result, schema)
-			}
-			if typeNode, ok := nodes[name]; ok {
-				result = append(result, typeNode)
+		// Filter to wanted types and their schema bindings.
+		filtered := make(map[string]bindings.Node, len(wantedNames)*2)
+		for name, node := range nodes {
+			baseName := strings.TrimSuffix(name, "Schema")
+			if wantedNames[baseName] {
+				filtered[name] = node
 			}
 		}
-		return result
+		return zod.SortByDependencies(filtered)
 	})
 	if err != nil {
 		log.Fatalf("serialize: %v", err)
@@ -129,95 +131,21 @@ func resolveTransitive(allNodes map[string]bindings.Node, seeds map[string]bool)
 	return result
 }
 
-// collectRefs extracts all type reference names from a node.
+// collectRefs extracts all type reference names from a node
+// using the generic AST walker.
 func collectRefs(node bindings.Node) []string {
-	var refs []string
-	var walkExpr func(bindings.ExpressionType)
-	walkExpr = func(expr bindings.ExpressionType) {
-		if expr == nil {
-			return
-		}
-		switch e := expr.(type) {
-		case *bindings.ReferenceType:
-			refs = append(refs, e.Name.Ref())
-			for _, arg := range e.Arguments {
-				walkExpr(arg)
-			}
-		case *bindings.ArrayType:
-			walkExpr(e.Node)
-		case *bindings.ArrayLiteralType:
-			for _, el := range e.Elements {
-				walkExpr(el)
-			}
-		case *bindings.UnionType:
-			for _, t := range e.Types {
-				walkExpr(t)
-			}
-		case *bindings.TypeLiteralNode:
-			for _, m := range e.Members {
-				walkExpr(m.Type)
-			}
-		case *bindings.TypeIntersection:
-			for _, t := range e.Types {
-				walkExpr(t)
-			}
-		case *bindings.ExpressionWithTypeArguments:
-			walkExpr(e.Expression)
-			for _, arg := range e.Arguments {
-				walkExpr(arg)
-			}
-		case *bindings.OperatorNodeType:
-			walkExpr(e.Type)
-		case *bindings.TupleType:
-			walkExpr(e.Node)
-		}
-	}
-	switch n := node.(type) {
-	case *bindings.Interface:
-		for _, f := range n.Fields {
-			walkExpr(f.Type)
-		}
-		for _, h := range n.Heritage {
-			for _, arg := range h.Args {
-				walkExpr(arg)
-			}
-		}
-	case *bindings.Alias:
-		walkExpr(n.Type)
-	}
-	return refs
+	v := &refVisitor{}
+	walk.Walk(v, node)
+	return v.refs
 }
 
-// topoSort returns names in dependency order (dependencies first).
-// Ties within the same depth level are broken alphabetically.
-func topoSort(nodes map[string]bindings.Node) []string {
-	visited := make(map[string]bool)
-	var order []string
+type refVisitor struct {
+	refs []string
+}
 
-	var visit func(string)
-	visit = func(name string) {
-		if visited[name] {
-			return
-		}
-		visited[name] = true
-		node, ok := nodes[name]
-		if !ok {
-			return
-		}
-		// Visit dependencies first.
-		deps := collectRefs(node)
-		slices.Sort(deps)
-		for _, dep := range deps {
-			if _, exists := nodes[dep]; exists {
-				visit(dep)
-			}
-		}
-		order = append(order, name)
+func (v *refVisitor) Visit(node bindings.Node) walk.Visitor {
+	if ref, ok := node.(*bindings.ReferenceType); ok {
+		v.refs = append(v.refs, ref.Name.Ref())
 	}
-
-	// Start visits in alphabetical order for stable output.
-	for _, name := range slices.Sorted(maps.Keys(nodes)) {
-		visit(name)
-	}
-	return order
+	return v
 }
