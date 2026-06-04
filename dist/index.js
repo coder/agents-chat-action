@@ -36491,6 +36491,7 @@ function normalizeBaseUrl(coderURL) {
 }
 
 // src/codersdk.gen.ts
+var ChatBusyBehaviorSchema = exports_external.enum(["interrupt", "queue"]);
 var ChatClientTypeSchema = exports_external.enum(["api", "ui"]);
 var ChatDiffStatusSchema = exports_external.object({
   chat_id: exports_external.string(),
@@ -36539,6 +36540,20 @@ var ChatFileMetadataSchema = exports_external.object({
   mime_type: exports_external.string(),
   created_at: exports_external.string()
 });
+var ChatInputPartTypeSchema = exports_external.enum([
+  "file",
+  "file-reference",
+  "text"
+]);
+var ChatInputPartSchema = exports_external.object({
+  type: ChatInputPartTypeSchema,
+  text: exports_external.string().optional(),
+  file_id: exports_external.string().optional(),
+  file_name: exports_external.string().optional(),
+  start_line: exports_external.number().optional(),
+  end_line: exports_external.number().optional(),
+  content: exports_external.string().optional()
+});
 var ChatPlanModeSchema = exports_external.enum(["plan"]);
 var ChatStatusSchema = exports_external.enum([
   "completed",
@@ -36579,21 +36594,6 @@ var ChatSchema = exports_external.object({
   warnings: exports_external.array(exports_external.string()).optional(),
   client_type: ChatClientTypeSchema,
   children: exports_external.array(exports_external.lazy(() => ChatSchema))
-});
-var ChatBusyBehaviorSchema = exports_external.enum(["interrupt", "queue"]);
-var ChatInputPartTypeSchema = exports_external.enum([
-  "file",
-  "file-reference",
-  "text"
-]);
-var ChatInputPartSchema = exports_external.object({
-  type: ChatInputPartTypeSchema,
-  text: exports_external.string().optional(),
-  file_id: exports_external.string().optional(),
-  file_name: exports_external.string().optional(),
-  start_line: exports_external.number().optional(),
-  end_line: exports_external.number().optional(),
-  content: exports_external.string().optional()
 });
 var CreateChatMessageRequestSchema = exports_external.object({
   content: exports_external.array(ChatInputPartSchema),
@@ -36645,6 +36645,11 @@ var OrganizationSchema = MinimalOrganizationSchema.extend({
   updated_at: exports_external.string(),
   is_default: exports_external.boolean()
 });
+var SlimRoleSchema = exports_external.object({
+  name: exports_external.string(),
+  display_name: exports_external.string(),
+  organization_id: exports_external.string().optional()
+});
 var UserStatusSchema = exports_external.enum(["active", "dormant", "suspended"]);
 var ReducedUserSchema = MinimalUserSchema.extend({
   email: exports_external.string(),
@@ -36655,11 +36660,6 @@ var ReducedUserSchema = MinimalUserSchema.extend({
   login_type: LoginTypeSchema,
   is_service_account: exports_external.boolean().optional(),
   theme_preference: exports_external.string().optional()
-});
-var SlimRoleSchema = exports_external.object({
-  name: exports_external.string(),
-  display_name: exports_external.string(),
-  organization_id: exports_external.string().optional()
 });
 var UserSchema = ReducedUserSchema.extend({
   organization_ids: exports_external.array(exports_external.string()),
