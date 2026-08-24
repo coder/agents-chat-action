@@ -16,6 +16,7 @@ import {
 	buildFailureCommentBody,
 	buildSuccessCommentBody,
 	classifyError,
+	DEFAULT_GITHUB_SERVER_URL,
 	deriveCommentKey,
 	type FailureDetail,
 	normalizeBaseUrl,
@@ -112,13 +113,15 @@ export class CoderAgentChatAction {
 			throw new Error("Missing GitHub URL");
 		}
 
-		const parsed = parseGithubItemURL(this.inputs.githubURL);
+		const serverURL = this.githubServerURL();
+		const parsed = parseGithubItemURL(this.inputs.githubURL, serverURL);
 		if (!parsed) {
 			throw new Error(
 				`Invalid \`github-url\` input "${this.inputs.githubURL}". ` +
-					"Expected `https://github.com/<owner>/<repo>/issues/<n>` or " +
-					"`https://github.com/<owner>/<repo>/pull/<n>`. The action " +
-					"rejects non-github.com hosts so a workflow that templates " +
+					`Expected \`${serverURL}/<owner>/<repo>/issues/<n>\` or ` +
+					`\`${serverURL}/<owner>/<repo>/pull/<n>\`. The action rejects ` +
+					"hosts other than the current GitHub server " +
+					"(`GITHUB_SERVER_URL`) so a workflow that templates " +
 					"user-controlled content into this input cannot redirect the " +
 					"action to an attacker-chosen repository.",
 			);
@@ -128,6 +131,14 @@ export class CoderAgentChatAction {
 			githubRepo: parsed.repo,
 			githubIssueNumber: parsed.number,
 		};
+	}
+
+	// The GitHub server the action runs against. The Actions runner sets
+	// `GITHUB_SERVER_URL` (e.g. `https://github.com` on dotcom,
+	// `https://github.example.com` on GHES). Falls back to dotcom outside a
+	// runner. Read at this edge so `comment.ts` helpers stay pure.
+	private githubServerURL(): string {
+		return process.env.GITHUB_SERVER_URL || DEFAULT_GITHUB_SERVER_URL;
 	}
 
 	/**
@@ -158,7 +169,11 @@ export class CoderAgentChatAction {
 		// stays pure and tests stay deterministic.
 		const workflow = process.env.GITHUB_WORKFLOW || undefined;
 		const marker = buildCommentMarker(
-			deriveCommentKey({ ...this.inputs, workflow }),
+			deriveCommentKey({
+				...this.inputs,
+				workflow,
+				serverURL: this.githubServerURL(),
+			}),
 		);
 		const diff = args.chat?.diff_status;
 		const hasPR = diff?.pr_number != null;
@@ -514,7 +529,11 @@ export class CoderAgentChatAction {
 		// stays pure and tests stay deterministic.
 		const workflow = process.env.GITHUB_WORKFLOW || undefined;
 		const marker = buildCommentMarker(
-			deriveCommentKey({ ...this.inputs, workflow }),
+			deriveCommentKey({
+				...this.inputs,
+				workflow,
+				serverURL: this.githubServerURL(),
+			}),
 		);
 		const body = buildFailureCommentBody(detail, {
 			agentsUrl: buildDeploymentAgentsUrl(this.inputs.coderURL),

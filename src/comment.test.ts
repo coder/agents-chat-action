@@ -12,6 +12,7 @@ import {
 	type FailureDetail,
 	findCommentByPredicate,
 	normalizeBaseUrl,
+	parseGithubItemURL,
 	renderDetailBlock,
 	type SuccessCommentContext,
 } from "./comment";
@@ -36,6 +37,93 @@ describe("buildCommentMarker", () => {
 		expect(buildCommentMarker("my-key")).toBe(
 			"<!-- coder-agents-chat-action:my-key -->",
 		);
+	});
+});
+
+describe("parseGithubItemURL", () => {
+	test("parses a dotcom issue URL under the default server", () => {
+		expect(
+			parseGithubItemURL("https://github.com/owner/repo/issues/123"),
+		).toEqual({ owner: "owner", repo: "repo", number: 123 });
+	});
+
+	test("parses a dotcom PR URL under the default server", () => {
+		expect(parseGithubItemURL("https://github.com/owner/repo/pull/42")).toEqual(
+			{ owner: "owner", repo: "repo", number: 42 },
+		);
+	});
+
+	test("tolerates a trailing slash, query string, and fragment", () => {
+		expect(
+			parseGithubItemURL("https://github.com/owner/repo/pull/42/?tab=files"),
+		).toEqual({ owner: "owner", repo: "repo", number: 42 });
+		expect(
+			parseGithubItemURL(
+				"https://github.com/owner/repo/issues/7#issuecomment-1",
+			),
+		).toEqual({ owner: "owner", repo: "repo", number: 7 });
+	});
+
+	test("rejects extra path segments", () => {
+		expect(
+			parseGithubItemURL("https://github.com/owner/repo/issues/123/files"),
+		).toBeUndefined();
+	});
+
+	test("parses a GHES URL when serverURL matches (host anchoring)", () => {
+		expect(
+			parseGithubItemURL(
+				"https://github.example.com/owner/repo/pull/1",
+				"https://github.example.com",
+			),
+		).toEqual({ owner: "owner", repo: "repo", number: 1 });
+	});
+
+	test("tolerates a trailing slash on serverURL", () => {
+		expect(
+			parseGithubItemURL(
+				"https://github.example.com/owner/repo/pull/1",
+				"https://github.example.com/",
+			),
+		).toEqual({ owner: "owner", repo: "repo", number: 1 });
+	});
+
+	test("rejects a host that does not match serverURL (security case)", () => {
+		// A URL on a different host than the runner's GITHUB_SERVER_URL must
+		// not parse, so user-controlled github-url cannot redirect the action
+		// to an attacker-chosen host.
+		expect(
+			parseGithubItemURL(
+				"https://attacker.example/owner/repo/issues/1",
+				"https://github.example.com",
+			),
+		).toBeUndefined();
+	});
+
+	test("rejects a dotcom URL when serverURL is a GHES host", () => {
+		expect(
+			parseGithubItemURL(
+				"https://github.com/owner/repo/issues/1",
+				"https://github.example.com",
+			),
+		).toBeUndefined();
+	});
+
+	test("does not treat the server host as a regex pattern", () => {
+		// The dots in the host are metacharacters; RegExp.escape must keep
+		// them literal so a host that merely matches the pattern (dot as
+		// wildcard) is still rejected.
+		expect(
+			parseGithubItemURL(
+				"https://githubXexample.com/owner/repo/issues/1",
+				"https://github.example.com",
+			),
+		).toBeUndefined();
+	});
+
+	test("returns undefined for empty input", () => {
+		expect(parseGithubItemURL(undefined)).toBeUndefined();
+		expect(parseGithubItemURL("")).toBeUndefined();
 	});
 });
 
@@ -75,6 +163,15 @@ describe("deriveCommentKey", () => {
 				githubURL: "https://code.acme.com/owner/repo/issues/42",
 			}),
 		).toBe("https://code.acme.com/owner/repo/issues/42");
+	});
+
+	test("derives <owner>/<repo>#<number> from a GHES URL when serverURL matches", () => {
+		expect(
+			deriveCommentKey({
+				githubURL: "https://github.example.com/owner/repo/issues/123",
+				serverURL: "https://github.example.com",
+			}),
+		).toBe("owner/repo#123");
 	});
 
 	test("appends workflow suffix to the derived per-target key", () => {

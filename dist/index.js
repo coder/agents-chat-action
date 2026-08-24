@@ -36791,20 +36791,27 @@ function sanitizeLabelToken(input) {
 }
 
 // src/comment.ts
-var GITHUB_URL_REGEX = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:issues|pull)\/(\d+)\/?(?:[?#].*)?$/;
-function parseGithubItemURL(input) {
+var DEFAULT_GITHUB_SERVER_URL = "https://github.com";
+var githubURLRegexCache = new Map;
+function githubURLRegex(serverURL) {
+  let regex = githubURLRegexCache.get(serverURL);
+  if (!regex) {
+    const base = RegExp.escape(normalizeBaseUrl(serverURL));
+    regex = new RegExp(`^${base}/([^/]+)/([^/]+)/(?:issues|pull)/(\\d+)/?(?:[?#].*)?$`);
+    githubURLRegexCache.set(serverURL, regex);
+  }
+  return regex;
+}
+function parseGithubItemURL(input, serverURL = DEFAULT_GITHUB_SERVER_URL) {
   if (!input) {
     return;
   }
-  const match = input.match(GITHUB_URL_REGEX);
+  const match = githubURLRegex(serverURL).exec(input);
   if (!match) {
     return;
   }
-  return {
-    owner: match[1],
-    repo: match[2],
-    number: Number.parseInt(match[3], 10)
-  };
+  const [, owner, repo, number4] = match;
+  return { owner, repo, number: Number.parseInt(number4, 10) };
 }
 var COMMENT_MARKER_PREFIX = "<!-- coder-agents-chat-action:";
 var COMMENT_MARKER_SUFFIX = " -->";
@@ -36815,7 +36822,7 @@ function deriveCommentKey(inputs) {
   if (inputs.idempotencyKey) {
     return sanitizeLabelToken(inputs.idempotencyKey);
   }
-  const parsed = parseGithubItemURL(inputs.githubURL);
+  const parsed = parseGithubItemURL(inputs.githubURL, inputs.serverURL);
   let base;
   if (!parsed) {
     base = inputs.githubURL;
@@ -37097,9 +37104,10 @@ class CoderAgentChatAction {
     if (!this.inputs.githubURL) {
       throw new Error("Missing GitHub URL");
     }
-    const parsed = parseGithubItemURL(this.inputs.githubURL);
+    const serverURL = this.githubServerURL();
+    const parsed = parseGithubItemURL(this.inputs.githubURL, serverURL);
     if (!parsed) {
-      throw new Error(`Invalid \`github-url\` input "${this.inputs.githubURL}". ` + "Expected `https://github.com/<owner>/<repo>/issues/<n>` or " + "`https://github.com/<owner>/<repo>/pull/<n>`. The action " + "rejects non-github.com hosts so a workflow that templates " + "user-controlled content into this input cannot redirect the " + "action to an attacker-chosen repository.");
+      throw new Error(`Invalid \`github-url\` input "${this.inputs.githubURL}". ` + `Expected \`${serverURL}/<owner>/<repo>/issues/<n>\` or ` + `\`${serverURL}/<owner>/<repo>/pull/<n>\`. The action rejects ` + "hosts other than the current GitHub server " + "(`GITHUB_SERVER_URL`) so a workflow that templates " + "user-controlled content into this input cannot redirect the " + "action to an attacker-chosen repository.");
     }
     return {
       githubOrg: parsed.owner,
@@ -37107,12 +37115,19 @@ class CoderAgentChatAction {
       githubIssueNumber: parsed.number
     };
   }
+  githubServerURL() {
+    return process.env.GITHUB_SERVER_URL || DEFAULT_GITHUB_SERVER_URL;
+  }
   generateChatUrl(chatId) {
     return `${normalizeBaseUrl(this.inputs.coderURL)}/agents/${chatId}`;
   }
   async commentOnIssue(args) {
     const workflow = process.env.GITHUB_WORKFLOW || undefined;
-    const marker = buildCommentMarker(deriveCommentKey({ ...this.inputs, workflow }));
+    const marker = buildCommentMarker(deriveCommentKey({
+      ...this.inputs,
+      workflow,
+      serverURL: this.githubServerURL()
+    }));
     const diff = args.chat?.diff_status;
     const hasPR = diff?.pr_number != null;
     const body = buildSuccessCommentBody({
@@ -37283,7 +37298,11 @@ class CoderAgentChatAction {
       return failure;
     }
     const workflow = process.env.GITHUB_WORKFLOW || undefined;
-    const marker = buildCommentMarker(deriveCommentKey({ ...this.inputs, workflow }));
+    const marker = buildCommentMarker(deriveCommentKey({
+      ...this.inputs,
+      workflow,
+      serverURL: this.githubServerURL()
+    }));
     const body = buildFailureCommentBody(detail, {
       agentsUrl: buildDeploymentAgentsUrl(this.inputs.coderURL),
       marker,

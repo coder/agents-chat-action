@@ -10,15 +10,34 @@ export { normalizeBaseUrl } from "./url";
 
 type Octokit = ReturnType<typeof getOctokit>;
 
-// Anchored regex for a GitHub issue or PR URL on `github.com`. Anchored
-// at both ends so a non-github host or extra path segments
+// Default GitHub server, used when `GITHUB_SERVER_URL` is unset (outside a
+// real Actions runner, e.g. tests or local invocation).
+export const DEFAULT_GITHUB_SERVER_URL = "https://github.com";
+
+// Anchored issue/PR URL matcher for `serverURL`, compiled once per server URL.
+// In production the server URL is fixed for the run, so this cache only ever
+// holds a single entry; it grows past one entry solely under tests that
+// exercise multiple hosts. `RegExp.escape` neutralizes metacharacters in the
+// host (e.g. the dots in `github.com`) so it matches literally. Anchored at
+// both ends so a non-server host or extra path segments
 // (e.g. `.../issues/123/files`, `https://attacker.example/owner/repo/issues/1`)
 // are rejected rather than silently truncated. The `(?:[?#].*)?` group keeps
 // the anchor tolerant of query strings and fragments that real-world
 // `github-url` inputs can carry (e.g. a URL copied while viewing a specific
 // comment).
-const GITHUB_URL_REGEX =
-	/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:issues|pull)\/(\d+)\/?(?:[?#].*)?$/;
+const githubURLRegexCache = new Map<string, RegExp>();
+
+function githubURLRegex(serverURL: string): RegExp {
+	let regex = githubURLRegexCache.get(serverURL);
+	if (!regex) {
+		const base = RegExp.escape(normalizeBaseUrl(serverURL));
+		regex = new RegExp(
+			`^${base}/([^/]+)/([^/]+)/(?:issues|pull)/(\\d+)/?(?:[?#].*)?$`,
+		);
+		githubURLRegexCache.set(serverURL, regex);
+	}
+	return regex;
+}
 
 /**
  * Parsed components of a `github-url` input. Returned by
@@ -31,27 +50,26 @@ export interface GithubItemURL {
 }
 
 /**
- * Validate `input` as a `https://github.com/<owner>/<repo>/(issues|pull)/<n>`
- * URL and return its components, or `undefined` if it does not match. The
- * host is anchored to `github.com` so a workflow that templates user-
- * controlled content into `github-url` cannot coerce the action into
- * commenting on an arbitrary attacker-chosen owner/repo.
+ * Validate `input` as a `<serverURL>/<owner>/<repo>/(issues|pull)/<n>` URL and
+ * return its components, or `undefined` if it does not match. The host is
+ * anchored to `serverURL` (the runner-provided `GITHUB_SERVER_URL`, defaulting
+ * to `https://github.com`) so a workflow that templates user-controlled content
+ * into `github-url` cannot coerce the action into commenting on an arbitrary
+ * attacker-chosen host. `serverURL` is runner-controlled, never user-controlled.
  */
 export function parseGithubItemURL(
 	input: string | undefined,
+	serverURL: string = DEFAULT_GITHUB_SERVER_URL,
 ): GithubItemURL | undefined {
 	if (!input) {
 		return undefined;
 	}
-	const match = input.match(GITHUB_URL_REGEX);
+	const match = githubURLRegex(serverURL).exec(input);
 	if (!match) {
 		return undefined;
 	}
-	return {
-		owner: match[1],
-		repo: match[2],
-		number: Number.parseInt(match[3], 10),
-	};
+	const [, owner, repo, number] = match;
+	return { owner, repo, number: Number.parseInt(number, 10) };
 }
 
 // Discriminated union so spend-exceeded fields are only representable on the
@@ -97,12 +115,13 @@ export function deriveCommentKey(
 	inputs: Pick<ActionInputs, "githubURL"> & {
 		idempotencyKey?: string;
 		workflow?: string;
+		serverURL?: string;
 	},
 ): string {
 	if (inputs.idempotencyKey) {
 		return sanitizeLabelToken(inputs.idempotencyKey);
 	}
-	const parsed = parseGithubItemURL(inputs.githubURL);
+	const parsed = parseGithubItemURL(inputs.githubURL, inputs.serverURL);
 	let base: string;
 	if (!parsed) {
 		// The action validates githubURL upstream; if we get here the input is
