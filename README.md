@@ -41,6 +41,11 @@ jobs:
 
 The chat runs as whoever the `coder-token` belongs to; that identity is the only one the chats API supports. Workflows that gate triggers loosely (`issue_comment`, `pull_request_target`, etc.) own the trust decision via an `if:` filter; see [Security model](#security-model).
 
+## Environment Variables
+| Name                   | Required | Default               | Description |
+| ---------------------- | -------- | --------------------- | ----------- |
+| `GITHUB_SERVER_URL`    | no       | `https://github.com`  | GitHub deployment URL, [autofilled by Actions](https://docs.github.com/en/actions/reference/workflows-and-actions/variables). |
+
 ## Inputs
 
 | Name                   | Required | Default | Description |
@@ -48,7 +53,7 @@ The chat runs as whoever the `coder-token` belongs to; that identity is the only
 | `coder-url`            | yes      |         | Coder deployment URL. |
 | `coder-token`          | yes      |         | Coder session token. The user this token belongs to is the chat owner; the chats API has no owner override. |
 | `chat-prompt`          | yes      |         | Prompt to send to the agent. |
-| `github-url`           | yes      |         | Issue or pull request URL. Host is validated; only `https://github.com/<owner>/<repo>/issues/<n>` and `https://github.com/<owner>/<repo>/pull/<n>` are accepted. |
+| `github-url`           | yes      |         | Issue or pull request URL. Matches the following: <br/> - `https://<$GITHUB_SERVER_URL>/<owner>/<repo>/issues/<n>` <br/> - `https://<$GITHUB_SERVER_URL>/<owner>/<repo>/pull/<n>` |
 | `github-token`         | yes      |         | Used to post and update comments. |
 | `coder-organization`   | no       |         | Coder organization name. Recommended for multi-org token owners. |
 | `workspace-id`         | no       |         | Pin the chat to an existing workspace. |
@@ -223,7 +228,7 @@ The action sets `chat-error-kind` and `chat-error-message` on failure, posts a c
 | ----------------- | ------------- | ---------- |
 | `spend_exceeded`  | Chat spend limit reached. Spent and limit are in the comment. | Wait for reset or raise the deployment's per-user limit. |
 | `org_not_found`   | Org missing or the token owner has no memberships. The comment names which. | Fix or set `coder-organization`. |
-| `api_error`       | Any other Coder API error. The comment includes the underlying message in a code block; wrapped errors carry the original `CoderAPIError` via `Error.cause`, and the workflow log renders the full cause chain. | Common causes: bad token, bad `workspace-id`, deployment unreachable, non-github.com `github-url`. |
+| `api_error`       | Any other Coder API error. The comment includes the underlying message in a code block; wrapped errors carry the original `CoderAPIError` via `Error.cause`, and the workflow log renders the full cause chain. | Common causes: bad token, bad `workspace-id`, deployment unreachable, `github-url` doesn't match the right pattern. |
 | `timeout`         | `wait: complete` didn't reach terminal in time. | Raise `wait-timeout-seconds`, or split the work. |
 
 Branch on the kind without parsing the message:
