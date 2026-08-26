@@ -177,7 +177,8 @@ describe("CoderAgentChatAction", () => {
 			// `https://attacker.example/coder/coder/issues/1` would have
 			// called `octokit.rest.issues.createComment` with owner=coder,
 			// repo=coder, number=1 under the workflow's `github-token`. The
-			// action now refuses.
+			// host is now anchored to `GITHUB_SERVER_URL` (default
+			// `https://github.com`), so a different host is refused.
 			const inputs = createMockInputs({
 				githubURL: "https://code.acme.com/owner/repo/issues/123",
 			});
@@ -188,7 +189,7 @@ describe("CoderAgentChatAction", () => {
 			);
 
 			expect(() => action.parseGithubURL()).toThrowError(
-				/non-github.com hosts/,
+				/current GitHub server/,
 			);
 		});
 
@@ -205,6 +206,57 @@ describe("CoderAgentChatAction", () => {
 			expect(() => action.parseGithubURL()).toThrowError(
 				/Invalid `github-url` input/,
 			);
+		});
+		test("accepts a GHES URL when GITHUB_SERVER_URL points at that host", () => {
+			const previous = process.env.GITHUB_SERVER_URL;
+			process.env.GITHUB_SERVER_URL = "https://github.example.com";
+			try {
+				const inputs = createMockInputs({
+					githubURL: "https://github.example.com/owner/repo/pull/7",
+				});
+				const action = new CoderAgentChatAction(
+					coderClient,
+					octokit as unknown as Octokit,
+					inputs,
+				);
+
+				expect(action.parseGithubURL()).toEqual({
+					githubOrg: "owner",
+					githubRepo: "repo",
+					githubIssueNumber: 7,
+				});
+			} finally {
+				if (previous === undefined) {
+					delete process.env.GITHUB_SERVER_URL;
+				} else {
+					process.env.GITHUB_SERVER_URL = previous;
+				}
+			}
+		});
+
+		test("rejects a dotcom URL when GITHUB_SERVER_URL points at a GHES host", () => {
+			const previous = process.env.GITHUB_SERVER_URL;
+			process.env.GITHUB_SERVER_URL = "https://github.example.com";
+			try {
+				const inputs = createMockInputs({
+					githubURL: "https://github.com/owner/repo/issues/1",
+				});
+				const action = new CoderAgentChatAction(
+					coderClient,
+					octokit as unknown as Octokit,
+					inputs,
+				);
+
+				expect(() => action.parseGithubURL()).toThrowError(
+					/current GitHub server/,
+				);
+			} finally {
+				if (previous === undefined) {
+					delete process.env.GITHUB_SERVER_URL;
+				} else {
+					process.env.GITHUB_SERVER_URL = previous;
+				}
+			}
 		});
 	});
 
