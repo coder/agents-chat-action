@@ -18,6 +18,8 @@ The action declares `runs.using: node20` instead of `node24`. This is deliberate
 
 So one release works everywhere: new runners execute the action with Node 24, older GHES runners execute it with Node 20. To keep that true, the code avoids APIs that need anything newer than Node 20.
 
+This mirrors the wider ecosystem: [actions/create-github-app-token](https://github.com/actions/create-github-app-token) kept its v2 line on `node20` after `node24` broke GHES ([#274](https://github.com/actions/create-github-app-token/issues/274)) and shipped `node24` only as breaking major v3, and [actions/checkout@v4](https://github.com/actions/checkout/blob/v4/action.yml) and [actions/github-script@v7](https://github.com/actions/github-script/blob/v7/action.yml) still declare `node20` today, with `node24` variants released as new majors that require runner v2.327.1+.
+
 ## Quickstart
 
 Triage every issue labeled `coder`:
