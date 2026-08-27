@@ -3,43 +3,25 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-function __accessProp(key) {
-  return this[key];
-}
-var __toESMCache_node;
-var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
-  var canCache = mod != null && typeof mod === "object";
-  if (canCache) {
-    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
-    var cached = cache.get(mod);
-    if (cached)
-      return cached;
-  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: __accessProp.bind(mod, key),
+        get: () => mod[key],
         enumerable: true
       });
-  if (canCache)
-    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
-var __returnValue = (v) => v;
-function __exportSetter(name, newValue) {
-  this[name] = __returnValue.bind(null, newValue);
-}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: __exportSetter.bind(all, name)
+      set: (newValue) => all[name] = () => newValue
     });
 };
 
@@ -13094,7 +13076,7 @@ var require_fetch = __commonJS((exports2, module2) => {
       request.cache = "no-store";
     }
     const newConnection = forceNewConnection ? "yes" : "no";
-    if (request.mode === "websocket") {}
+    if (request.mode === "websocket") {} else {}
     let requestBody = null;
     if (request.body == null && fetchParams.processRequestEndOfBody) {
       queueMicrotask(() => fetchParams.processRequestEndOfBody());
@@ -17280,7 +17262,7 @@ var require_undici = __commonJS((exports2, module2) => {
   module2.exports.setGlobalDispatcher = setGlobalDispatcher;
   module2.exports.getGlobalDispatcher = getGlobalDispatcher;
   var fetchImpl = require_fetch().fetch;
-  module2.exports.fetch = async function fetch2(init, options = undefined) {
+  module2.exports.fetch = async function fetch(init, options = undefined) {
     try {
       return await fetchImpl(init, options);
     } catch (err) {
@@ -18299,8 +18281,8 @@ function prepareKeyValueMessage(key, value) {
 var os4 = __toESM(require("os"));
 
 // node_modules/@actions/http-client/lib/index.js
-var tunnel = __toESM(require_tunnel2(), 1);
-var import_undici = __toESM(require_undici(), 1);
+var tunnel = __toESM(require_tunnel2());
+var import_undici = __toESM(require_undici());
 var HttpCodes;
 (function(HttpCodes2) {
   HttpCodes2[HttpCodes2["OK"] = 200] = "OK";
@@ -18623,8 +18605,8 @@ class Context {
 }
 
 // node_modules/@actions/github/lib/internal/utils.js
-var httpClient = __toESM(require_lib(), 1);
-var import_undici2 = __toESM(require_undici(), 1);
+var httpClient = __toESM(require_lib());
+var import_undici2 = __toESM(require_undici());
 var __awaiter2 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
     return value instanceof P ? value : new P(function(resolve) {
@@ -19107,7 +19089,7 @@ function withDefaults(oldDefaults, newDefaults) {
 var endpoint = withDefaults(null, DEFAULTS);
 
 // node_modules/@octokit/request/dist-bundle/index.js
-var import_content_type = __toESM(require_dist(), 1);
+var import_content_type = __toESM(require_dist());
 
 // node_modules/json-with-bigint/json-with-bigint.js
 var intRegex = /^-?\d+$/;
@@ -33673,7 +33655,7 @@ function finalize(ctx, schema) {
     result.$schema = "http://json-schema.org/draft-07/schema#";
   } else if (ctx.target === "draft-04") {
     result.$schema = "http://json-schema.org/draft-04/schema#";
-  } else if (ctx.target === "openapi-3.0") {}
+  } else if (ctx.target === "openapi-3.0") {} else {}
   if (ctx.external?.uri) {
     const id = ctx.external.registry.get(schema)?.id;
     if (!id)
@@ -33917,7 +33899,7 @@ var literalProcessor = (schema, ctx, json, _params) => {
     if (val === undefined) {
       if (ctx.unrepresentable === "throw") {
         throw new Error("Literal `undefined` cannot be represented in JSON Schema");
-      }
+      } else {}
     } else if (typeof val === "bigint") {
       if (ctx.unrepresentable === "throw") {
         throw new Error("BigInt literals cannot be represented in JSON Schema");
@@ -36793,10 +36775,13 @@ function sanitizeLabelToken(input) {
 // src/comment.ts
 var DEFAULT_GITHUB_SERVER_URL = "https://github.com";
 var githubURLRegexCache = new Map;
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 function githubURLRegex(serverURL) {
   let regex = githubURLRegexCache.get(serverURL);
   if (!regex) {
-    const base = RegExp.escape(normalizeBaseUrl(serverURL));
+    const base = escapeRegExp(normalizeBaseUrl(serverURL));
     regex = new RegExp(`^${base}/([^/]+)/([^/]+)/(?:issues|pull)/(\\d+)/?(?:[?#].*)?$`);
     githubURLRegexCache.set(serverURL, regex);
   }
@@ -37643,6 +37628,6 @@ async function main() {
     }
   }
 }
-if (require.main == module) {
+if (require.main == require.module) {
   main();
 }

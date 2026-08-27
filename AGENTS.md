@@ -7,7 +7,7 @@
 **Key Difference from create-task-action**: This action targets the Coder Agents Chat API (`/api/experimental/chats`) instead of the Tasks API. Agents purposefully does NOT expose template selection. It either auto-provisions a workspace or uses an existing one.
 
 **Tech Stack**:
-- **Action Runtime**: Node 24
+- **Action Runtime**: Node 20 (GHES 3.16 runners reject `using: node24`)
 - **Development Runtime**: Bun (JavaScript/TypeScript runtime & bundler)
 - **Language**: TypeScript with strict mode enabled
 - **Validation**: Zod for runtime schema validation
