@@ -17,7 +17,7 @@ export const DEFAULT_GITHUB_SERVER_URL = "https://github.com";
 // Anchored issue/PR URL matcher for `serverURL`, compiled once per server URL.
 // In production the server URL is fixed for the run, so this cache only ever
 // holds a single entry; it grows past one entry solely under tests that
-// exercise multiple hosts. `RegExp.escape` neutralizes metacharacters in the
+// exercise multiple hosts. `escapeRegExp` neutralizes metacharacters in the
 // host (e.g. the dots in `github.com`) so it matches literally. Anchored at
 // both ends so a non-server host or extra path segments
 // (e.g. `.../issues/123/files`, `https://attacker.example/owner/repo/issues/1`)
@@ -27,10 +27,17 @@ export const DEFAULT_GITHUB_SERVER_URL = "https://github.com";
 // comment).
 const githubURLRegexCache = new Map<string, RegExp>();
 
+// Escape regex metacharacters so the string matches literally. Hand-rolled
+// because `RegExp.escape` requires Node 24+, while the action targets Node 20
+// (GHES 3.16 runners reject `using: node24` at job setup).
+function escapeRegExp(s: string): string {
+	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function githubURLRegex(serverURL: string): RegExp {
 	let regex = githubURLRegexCache.get(serverURL);
 	if (!regex) {
-		const base = RegExp.escape(normalizeBaseUrl(serverURL));
+		const base = escapeRegExp(normalizeBaseUrl(serverURL));
 		regex = new RegExp(
 			`^${base}/([^/]+)/([^/]+)/(?:issues|pull)/(\\d+)/?(?:[?#].*)?$`,
 		);

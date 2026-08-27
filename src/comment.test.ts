@@ -110,7 +110,7 @@ describe("parseGithubItemURL", () => {
 	});
 
 	test("does not treat the server host as a regex pattern", () => {
-		// The dots in the host are metacharacters; RegExp.escape must keep
+		// The dots in the host are metacharacters; escapeRegExp must keep
 		// them literal so a host that merely matches the pattern (dot as
 		// wildcard) is still rejected.
 		expect(

@@ -36793,10 +36793,13 @@ function sanitizeLabelToken(input) {
 // src/comment.ts
 var DEFAULT_GITHUB_SERVER_URL = "https://github.com";
 var githubURLRegexCache = new Map;
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 function githubURLRegex(serverURL) {
   let regex = githubURLRegexCache.get(serverURL);
   if (!regex) {
-    const base = RegExp.escape(normalizeBaseUrl(serverURL));
+    const base = escapeRegExp(normalizeBaseUrl(serverURL));
     regex = new RegExp(`^${base}/([^/]+)/([^/]+)/(?:issues|pull)/(\\d+)/?(?:[?#].*)?$`);
     githubURLRegexCache.set(serverURL, regex);
   }
