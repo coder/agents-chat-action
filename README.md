@@ -9,6 +9,15 @@ The chat owner is always the user the `coder-token` belongs to. Read [Security m
 - Coder deployment with Agents enabled (experimental).
 - Coder session token belonging to the user the chats should run as. Treat this token as a high-value secret: anyone holding it acts as that Coder user via the agent's tool plane (see [Security model](#security-model)).
 
+## Node runtime
+
+The action declares `runs.using: node20` instead of `node24`. This is deliberate:
+
+- GitHub Enterprise Server ships older runners that reject `using: node24` at job setup, before the action even loads.
+- Current GitHub.com runners run `node20` actions on Node 24 automatically. Node 20 itself reached end-of-life in April 2026 and is being removed from GitHub-hosted runners, but actions declaring `node20` still load and simply run on Node 24.
+
+So one release works everywhere: new runners execute the action with Node 24, older GHES runners execute it with Node 20. To keep that true, the code avoids APIs that need anything newer than Node 20.
+
 ## Quickstart
 
 Triage every issue labeled `coder`:
