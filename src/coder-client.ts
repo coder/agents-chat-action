@@ -8,6 +8,7 @@ import {
 	ChatStatusSchema,
 	CreateChatMessageRequestSchema,
 	CreateChatRequestSchema,
+	GroupSchema,
 	OrganizationSchema,
 	UpdateChatACLSchema,
 	UserSchema,
@@ -15,6 +16,7 @@ import {
 import type {
 	CreateChatMessageRequest,
 	CreateChatRequest,
+	Group,
 	Organization,
 	UpdateChatACL,
 	User,
@@ -38,6 +40,7 @@ export {
 	ChatStatusSchema,
 	CreateChatMessageRequestSchema,
 	CreateChatRequestSchema,
+	GroupSchema,
 	OrganizationSchema,
 	UpdateChatACLSchema,
 	UserSchema,
@@ -50,6 +53,7 @@ export type {
 	ChatStatus,
 	CreateChatMessageRequest,
 	CreateChatRequest,
+	Group,
 	Organization,
 	UpdateChatACL,
 	User,
@@ -84,6 +88,18 @@ export interface CoderClient {
 
 	getOrganizationByName(name: string): Promise<Organization>;
 
+	/**
+	 * Resolve a user by username or UUID via `GET /api/v2/users/{user}`.
+	 */
+	getUser(usernameOrID: string): Promise<User>;
+
+	/**
+	 * Resolve a group by name inside an organization via
+	 * `GET /api/v2/organizations/{organization}/groups/{groupName}`. Served
+	 * by the licensed build only; unlicensed deployments answer 404.
+	 */
+	getGroupByName(organizationID: string, name: string): Promise<Group>;
+
 	createChat(params: CreateChatRequest): Promise<CoderChat>;
 
 	createChatMessage(
@@ -99,7 +115,8 @@ export interface CoderClient {
 	 * Grant read access on a chat to users or groups via
 	 * `PATCH /api/v2/chats/{chat}/acl`. Every chat is owned by the
 	 * `coder-token` holder, so without an ACL entry nobody else can open
-	 * one. Group entries send no notifications; user entries do.
+	 * one. Keys must be existing UUIDs. Group entries send no
+	 * notifications; user entries do.
 	 */
 	updateChatACL(chatId: ChatId, params: UpdateChatACL): Promise<void>;
 }
@@ -188,6 +205,28 @@ export class RealCoderClient implements CoderClient {
 		const endpoint = `/api/v2/organizations/${encodeURIComponent(name)}`;
 		const response = await this.request<unknown>(endpoint);
 		return OrganizationSchema.parse(response);
+	}
+
+	async getUser(usernameOrID: string): Promise<User> {
+		if (!usernameOrID) {
+			throw new CoderAPIError("User cannot be empty", 400);
+		}
+		const endpoint = `/api/v2/users/${encodeURIComponent(usernameOrID)}`;
+		const response = await this.request<unknown>(endpoint);
+		return UserSchema.parse(response);
+	}
+
+	async getGroupByName(organizationID: string, name: string): Promise<Group> {
+		if (!organizationID || !name) {
+			throw new CoderAPIError(
+				"Organization and group name cannot be empty",
+				400,
+			);
+		}
+		// Only the ID is needed, so leave the member list out of the response.
+		const endpoint = `/api/v2/organizations/${encodeURIComponent(organizationID)}/groups/${encodeURIComponent(name)}?exclude_members=true`;
+		const response = await this.request<unknown>(endpoint);
+		return GroupSchema.parse(response);
 	}
 
 	async createChat(params: CreateChatRequest): Promise<CoderChat> {

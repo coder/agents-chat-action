@@ -4,6 +4,7 @@ import { ActionFailureError, CoderAgentChatAction } from "./action";
 import { RealCoderClient } from "./coder-client";
 import { setActionOutputs, setFailureOutputs } from "./outputs";
 import { ActionInputsSchema } from "./schemas";
+import { parseShareList } from "./sharing";
 
 async function main() {
 	try {
@@ -23,6 +24,8 @@ async function main() {
 			idempotencyKey: core.getInput("idempotency-key") || undefined,
 			forceNewChat: core.getBooleanInput("force-new-chat"),
 			shareWithOrganization: core.getBooleanInput("share-with-organization"),
+			shareWithGroups: parseShareList(core.getInput("share-with-groups")),
+			shareWithUsers: parseShareList(core.getInput("share-with-users")),
 		});
 
 		core.debug("Inputs validated successfully");

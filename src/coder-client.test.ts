@@ -9,6 +9,7 @@ import {
 	mockChat,
 	mockChatMessageResponse,
 	mockOrganization,
+	mockGroup,
 	createMockInputs,
 	createMockResponse,
 } from "./test-helpers";
@@ -133,6 +134,30 @@ describe("CoderClient", () => {
 						"Coder-Session-Token": "test-token",
 					}),
 				}),
+			);
+		});
+	});
+
+	describe("getUser", () => {
+		test("looks a user up by username or ID on the v2 route", async () => {
+			mockFetch.mockResolvedValue(createMockResponse(mockUser));
+			const result = await client.getUser("nick");
+			expect(result.id).toBe(mockUser.id);
+			expect(mockFetch).toHaveBeenCalledWith(
+				"https://coder.test/api/v2/users/nick",
+				expect.anything(),
+			);
+		});
+	});
+
+	describe("getGroupByName", () => {
+		test("looks a group up inside the organization without its members", async () => {
+			mockFetch.mockResolvedValue(createMockResponse(mockGroup));
+			const result = await client.getGroupByName(mockOrganization.id, "docs");
+			expect(result.id).toBe(mockGroup.id);
+			expect(mockFetch).toHaveBeenCalledWith(
+				`https://coder.test/api/v2/organizations/${mockOrganization.id}/groups/docs?exclude_members=true`,
+				expect.anything(),
 			);
 		});
 	});

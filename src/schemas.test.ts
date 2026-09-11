@@ -20,6 +20,8 @@ const actionInputValid: ActionInputs = {
 	waitTimeoutSeconds: DEFAULT_WAIT_TIMEOUT_SECONDS,
 	forceNewChat: false,
 	shareWithOrganization: false,
+	shareWithGroups: [],
+	shareWithUsers: [],
 };
 
 describe("ActionInputsSchema", () => {
@@ -97,11 +99,22 @@ describe("ActionInputsSchema", () => {
 			}
 		});
 
-		test("shareWithOrganization defaults to false when omitted", () => {
-			const { shareWithOrganization, ...withoutShare } = actionInputValid;
-			expect(shareWithOrganization).toBe(false);
+		test("share-with-* inputs default to off and empty when omitted", () => {
+			const {
+				shareWithOrganization,
+				shareWithGroups,
+				shareWithUsers,
+				...withoutShare
+			} = actionInputValid;
+			expect([shareWithOrganization, shareWithGroups, shareWithUsers]).toEqual([
+				false,
+				[],
+				[],
+			]);
 			const result = ActionInputsSchema.parse(withoutShare);
 			expect(result.shareWithOrganization).toBe(false);
+			expect(result.shareWithGroups).toEqual([]);
+			expect(result.shareWithUsers).toEqual([]);
 		});
 	});
 

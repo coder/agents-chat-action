@@ -59,6 +59,7 @@ CoderAgentChatAction.run() (action.ts)
 - **index.ts** - Entry point, parses GHA inputs, initializes clients, runs action
 - **action.ts** - Core business logic: user resolution, chat creation, issue commenting
 - **coder-client.ts** - Coder API client for Chat endpoints + user lookup
+- **sharing.ts** - Resolves `share-with-*` inputs to the UUIDs the ACL API needs and grants read access on a new chat
 - **schemas.ts** - Zod schemas for action inputs and outputs
 
 ### Test Files (src/*.test.ts)
@@ -103,4 +104,6 @@ bun run build
   - `GET /api/experimental/chats` - List chats
 
 - **Chat sharing**:
-  - `PATCH /api/v2/chats/{id}/acl` - Grant read access to users or groups (used by `share-with-organization`)
+  - `PATCH /api/v2/chats/{id}/acl` - Grant read access to users or groups (used by the `share-with-*` inputs)
+  - `GET /api/v2/users/{user}` - Resolve a username to its UUID
+  - `GET /api/v2/organizations/{organization}/groups/{groupName}` - Resolve a group name to its UUID (licensed deployments only)

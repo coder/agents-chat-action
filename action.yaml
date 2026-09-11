@@ -68,9 +68,17 @@ inputs:
     default: "false"
 
   share-with-organization:
-    description: "Give the chat's Coder organization read access to a newly created chat, so people other than the `coder-token` holder can open it. Only applies when this run creates the chat; a reused chat keeps whatever access it already had. Read-only, and group access sends no notifications. A deployment with chat sharing disabled logs a warning instead of failing the run."
+    description: "Give the chat's Coder organization read access to a newly created chat, so people other than the `coder-token` holder can open it. The Everyone group shares its organization's ID, so this needs no group lookup. Only applies when this run creates the chat; a reused chat keeps whatever access it already had. Read-only, and group access sends no notifications. A deployment with chat sharing disabled logs a warning instead of failing the run."
     required: false
     default: "false"
+
+  share-with-groups:
+    description: "Coder groups to give read access to a newly created chat, as names or UUIDs, separated by commas or newlines. Names resolve inside the chat's organization and need a licensed deployment; UUIDs work everywhere. An entry that does not resolve is skipped with a warning. Same creation-only and read-only rules as share-with-organization."
+    required: false
+
+  share-with-users:
+    description: "Coder users to give read access to a newly created chat, as usernames or UUIDs, separated by commas or newlines. Each named user gets one notification per new chat; groups do not. The `coder-token` owner is skipped, since a chat cannot be shared with its own owner. Same creation-only and read-only rules as share-with-organization."
+    required: false
 
 outputs:
   coder-username:
