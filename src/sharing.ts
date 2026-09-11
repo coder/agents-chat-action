@@ -29,10 +29,6 @@ export interface ShareContext {
 
 const UUIDSchema = z.uuid();
 
-function isUUID(value: string): boolean {
-	return UUIDSchema.safeParse(value).success;
-}
-
 /**
  * Split a `share-with-groups` or `share-with-users` input. Accepts commas,
  * newlines, or both, so a one-line YAML value and a block scalar both work.
@@ -41,16 +37,11 @@ export function parseShareList(raw: string | undefined): string[] {
 	if (!raw) {
 		return [];
 	}
-	const seen = new Set<string>();
-	const out: string[] = [];
-	for (const part of raw.split(/[,\n]/)) {
-		const value = part.trim();
-		if (value && !seen.has(value)) {
-			seen.add(value);
-			out.push(value);
-		}
-	}
-	return out;
+	const values = raw
+		.split(/[,\n]/)
+		.map((part) => part.trim())
+		.filter(Boolean);
+	return [...new Set(values)];
 }
 
 export function hasShareTargets(request: ShareRequest): boolean {
@@ -62,8 +53,8 @@ export function hasShareTargets(request: ShareRequest): boolean {
 }
 
 /**
- * Turn names into the UUIDs the ACL API requires. Every entry the API
- * receives must be an existing UUID, so anything that fails to resolve is
+ * Turn names into the UUIDs the ACL API requires. Every key the API
+ * receives must be an existing UUID, so an entry that fails to resolve is
  * dropped with a warning rather than sent along to fail the whole PATCH.
  * Returns null when nothing is left to share.
  */
@@ -72,90 +63,41 @@ export async function resolveChatShare(
 	request: ShareRequest,
 	ctx: ShareContext,
 ): Promise<UpdateChatACL | null> {
-	const groupRoles: Record<string, "read"> = {};
-	const userRoles: Record<string, "read"> = {};
+	const [groupIDs, userIDs] = await Promise.all([
+		resolveAll(request.groups, (group) =>
+			resolveID("share-with-groups", group, async () => {
+				const found = await coder.getGroupByName(ctx.organizationID, group);
+				return found.id;
+			}),
+		),
+		resolveAll(request.users, (user) =>
+			resolveID("share-with-users", user, async () => {
+				const found = await coder.getUser(user);
+				return found.id;
+			}),
+		),
+	]);
 
 	if (request.organization) {
 		// The Everyone group shares its organization's ID, so this needs no
 		// lookup and works on deployments without the groups API.
-		groupRoles[ctx.organizationID] = "read";
+		groupIDs.add(ctx.organizationID);
 	}
 
-	for (const group of request.groups) {
-		const id = await resolveGroupID(coder, ctx.organizationID, group);
-		if (id) {
-			groupRoles[id] = "read";
-		}
+	// The owner already reads their own chat, and the API answers 400 to a
+	// request that changes the caller's own role, which would take every
+	// other entry in this PATCH down with it.
+	if (userIDs.delete(ctx.tokenOwnerID)) {
+		core.info("Skipping the coder-token owner in share-with-users");
 	}
 
-	for (const user of request.users) {
-		const id = await resolveUserID(coder, user);
-		if (!id) {
-			continue;
-		}
-		if (id === ctx.tokenOwnerID) {
-			// The owner already reads their own chat, and the API answers 400
-			// to a request that changes the caller's own role, which would
-			// take every other entry in this PATCH down with it.
-			core.info(
-				`Skipping share-with-users entry '${user}': it is the coder-token owner`,
-			);
-			continue;
-		}
-		userRoles[id] = "read";
+	if (groupIDs.size === 0 && userIDs.size === 0) {
+		return null;
 	}
-
-	const acl: UpdateChatACL = {};
-	if (Object.keys(groupRoles).length > 0) {
-		acl.group_roles = groupRoles;
-	}
-	if (Object.keys(userRoles).length > 0) {
-		acl.user_roles = userRoles;
-	}
-	return acl.group_roles || acl.user_roles ? acl : null;
-}
-
-async function resolveGroupID(
-	coder: CoderClient,
-	organizationID: string,
-	group: string,
-): Promise<string | undefined> {
-	if (isUUID(group)) {
-		return group;
-	}
-	try {
-		const found = await coder.getGroupByName(organizationID, group);
-		return found.id;
-	} catch (error) {
-		// Group lookup by name is served by the licensed build only. A UUID
-		// skips the lookup, so name the workaround in the warning.
-		const hint =
-			error instanceof CoderAPIError && error.statusCode === 404
-				? " Group lookup by name needs a licensed deployment; pass the group UUID instead."
-				: "";
-		core.warning(
-			`Could not resolve share-with-groups entry '${group}': ${describe(error)}.${hint}`,
-		);
-		return undefined;
-	}
-}
-
-async function resolveUserID(
-	coder: CoderClient,
-	user: string,
-): Promise<string | undefined> {
-	if (isUUID(user)) {
-		return user;
-	}
-	try {
-		const found = await coder.getUser(user);
-		return found.id;
-	} catch (error) {
-		core.warning(
-			`Could not resolve share-with-users entry '${user}': ${describe(error)}`,
-		);
-		return undefined;
-	}
+	return {
+		...(groupIDs.size > 0 && { group_roles: readRoles(groupIDs) }),
+		...(userIDs.size > 0 && { user_roles: readRoles(userIDs) }),
+	};
 }
 
 /**
@@ -183,23 +125,54 @@ export async function shareNewChat(
 	}
 	try {
 		await coder.updateChatACL(chatId, acl);
-		core.info(`Granted read access on the chat to ${summarize(acl)}`);
+		core.info(
+			`Granted read access on the chat to ${Object.keys(acl.group_roles ?? {}).length} group(s) and ${Object.keys(acl.user_roles ?? {}).length} user(s)`,
+		);
 	} catch (error) {
 		core.warning(`Could not share the chat: ${describe(error)}`);
 	}
 }
 
-function summarize(acl: UpdateChatACL): string {
-	const parts: string[] = [];
-	const groups = Object.keys(acl.group_roles ?? {}).length;
-	const users = Object.keys(acl.user_roles ?? {}).length;
-	if (groups) {
-		parts.push(`${groups} group${groups === 1 ? "" : "s"}`);
+async function resolveAll(
+	values: string[],
+	resolve: (value: string) => Promise<string | undefined>,
+): Promise<Set<string>> {
+	const ids = await Promise.all(values.map(resolve));
+	return new Set(ids.filter((id): id is string => id !== undefined));
+}
+
+/**
+ * A UUID is used as given. Anything else goes through `lookup`, and a
+ * failed lookup becomes a warning naming the input and the entry.
+ */
+async function resolveID(
+	input: string,
+	value: string,
+	lookup: () => Promise<string>,
+): Promise<string | undefined> {
+	if (UUIDSchema.safeParse(value).success) {
+		return value;
 	}
-	if (users) {
-		parts.push(`${users} user${users === 1 ? "" : "s"}`);
+	try {
+		return await lookup();
+	} catch (error) {
+		// Group lookup by name is only served by the licensed build, so a 404
+		// there is ambiguous. A UUID skips the lookup either way.
+		const hint =
+			input === "share-with-groups" &&
+			error instanceof CoderAPIError &&
+			error.statusCode === 404
+				? " Either the group does not exist, or this deployment is unlicensed and cannot look groups up by name; a group UUID works in both cases."
+				: "";
+		core.warning(
+			`Could not resolve ${input} entry '${value}': ${describe(error)}.${hint}`,
+		);
+		return undefined;
 	}
-	return parts.join(" and ");
+}
+
+function readRoles(ids: Set<string>): Record<string, "read"> {
+	return Object.fromEntries([...ids].map((id) => [id, "read" as const]));
 }
 
 function describe(error: unknown): string {

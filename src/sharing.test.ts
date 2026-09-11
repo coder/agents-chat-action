@@ -128,7 +128,7 @@ describe("resolveChatShare", () => {
 		);
 		expect(acl).toEqual({ group_roles: { [ORG]: "read" } });
 		expect(warning).toHaveBeenCalledWith(
-			expect.stringContaining("needs a licensed deployment"),
+			expect.stringContaining("group UUID works in both cases"),
 		);
 	});
 

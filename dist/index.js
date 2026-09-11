@@ -37108,83 +37108,40 @@ function buildDeploymentAgentsUrl(coderURL) {
 
 // src/sharing.ts
 var UUIDSchema = exports_external.uuid();
-function isUUID(value) {
-  return UUIDSchema.safeParse(value).success;
-}
 function parseShareList(raw) {
   if (!raw) {
     return [];
   }
-  const seen = new Set;
-  const out = [];
-  for (const part of raw.split(/[,\n]/)) {
-    const value = part.trim();
-    if (value && !seen.has(value)) {
-      seen.add(value);
-      out.push(value);
-    }
-  }
-  return out;
+  const values = raw.split(/[,\n]/).map((part) => part.trim()).filter(Boolean);
+  return [...new Set(values)];
 }
 function hasShareTargets(request2) {
   return request2.organization || request2.groups.length > 0 || request2.users.length > 0;
 }
 async function resolveChatShare(coder, request2, ctx) {
-  const groupRoles = {};
-  const userRoles = {};
+  const [groupIDs, userIDs] = await Promise.all([
+    resolveAll(request2.groups, (group) => resolveID("share-with-groups", group, async () => {
+      const found = await coder.getGroupByName(ctx.organizationID, group);
+      return found.id;
+    })),
+    resolveAll(request2.users, (user) => resolveID("share-with-users", user, async () => {
+      const found = await coder.getUser(user);
+      return found.id;
+    }))
+  ]);
   if (request2.organization) {
-    groupRoles[ctx.organizationID] = "read";
+    groupIDs.add(ctx.organizationID);
   }
-  for (const group of request2.groups) {
-    const id = await resolveGroupID(coder, ctx.organizationID, group);
-    if (id) {
-      groupRoles[id] = "read";
-    }
+  if (userIDs.delete(ctx.tokenOwnerID)) {
+    info("Skipping the coder-token owner in share-with-users");
   }
-  for (const user of request2.users) {
-    const id = await resolveUserID(coder, user);
-    if (!id) {
-      continue;
-    }
-    if (id === ctx.tokenOwnerID) {
-      info(`Skipping share-with-users entry '${user}': it is the coder-token owner`);
-      continue;
-    }
-    userRoles[id] = "read";
+  if (groupIDs.size === 0 && userIDs.size === 0) {
+    return null;
   }
-  const acl = {};
-  if (Object.keys(groupRoles).length > 0) {
-    acl.group_roles = groupRoles;
-  }
-  if (Object.keys(userRoles).length > 0) {
-    acl.user_roles = userRoles;
-  }
-  return acl.group_roles || acl.user_roles ? acl : null;
-}
-async function resolveGroupID(coder, organizationID, group) {
-  if (isUUID(group)) {
-    return group;
-  }
-  try {
-    const found = await coder.getGroupByName(organizationID, group);
-    return found.id;
-  } catch (error52) {
-    const hint = error52 instanceof CoderAPIError && error52.statusCode === 404 ? " Group lookup by name needs a licensed deployment; pass the group UUID instead." : "";
-    warning(`Could not resolve share-with-groups entry '${group}': ${describe3(error52)}.${hint}`);
-    return;
-  }
-}
-async function resolveUserID(coder, user) {
-  if (isUUID(user)) {
-    return user;
-  }
-  try {
-    const found = await coder.getUser(user);
-    return found.id;
-  } catch (error52) {
-    warning(`Could not resolve share-with-users entry '${user}': ${describe3(error52)}`);
-    return;
-  }
+  return {
+    ...groupIDs.size > 0 && { group_roles: readRoles(groupIDs) },
+    ...userIDs.size > 0 && { user_roles: readRoles(userIDs) }
+  };
 }
 async function shareNewChat(coder, chatId, request2, ctx) {
   if (!hasShareTargets(request2)) {
@@ -37197,22 +37154,29 @@ async function shareNewChat(coder, chatId, request2, ctx) {
   }
   try {
     await coder.updateChatACL(chatId, acl);
-    info(`Granted read access on the chat to ${summarize(acl)}`);
+    info(`Granted read access on the chat to ${Object.keys(acl.group_roles ?? {}).length} group(s) and ${Object.keys(acl.user_roles ?? {}).length} user(s)`);
   } catch (error52) {
     warning(`Could not share the chat: ${describe3(error52)}`);
   }
 }
-function summarize(acl) {
-  const parts = [];
-  const groups = Object.keys(acl.group_roles ?? {}).length;
-  const users = Object.keys(acl.user_roles ?? {}).length;
-  if (groups) {
-    parts.push(`${groups} group${groups === 1 ? "" : "s"}`);
+async function resolveAll(values, resolve) {
+  const ids = await Promise.all(values.map(resolve));
+  return new Set(ids.filter((id) => id !== undefined));
+}
+async function resolveID(input, value, lookup) {
+  if (UUIDSchema.safeParse(value).success) {
+    return value;
   }
-  if (users) {
-    parts.push(`${users} user${users === 1 ? "" : "s"}`);
+  try {
+    return await lookup();
+  } catch (error52) {
+    const hint = input === "share-with-groups" && error52 instanceof CoderAPIError && error52.statusCode === 404 ? " Either the group does not exist, or this deployment is unlicensed and cannot look groups up by name; a group UUID works in both cases." : "";
+    warning(`Could not resolve ${input} entry '${value}': ${describe3(error52)}.${hint}`);
+    return;
   }
-  return parts.join(" and ");
+}
+function readRoles(ids) {
+  return Object.fromEntries([...ids].map((id) => [id, "read"]));
 }
 function describe3(error52) {
   return error52 instanceof Error ? error52.message : String(error52);
