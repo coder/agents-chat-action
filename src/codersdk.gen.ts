@@ -93,6 +93,10 @@ export const ChatPlanModeSchema = z.enum(["plan"]);
 
 export type ChatPlanMode = z.infer<typeof ChatPlanModeSchema>;
 
+export const ChatRoleSchema = z.enum(["", "read"]);
+
+export type ChatRole = z.infer<typeof ChatRoleSchema>;
+
 export const ChatStatusSchema = z.enum([
 	"completed",
 	"error",
@@ -219,6 +223,13 @@ export const SlimRoleSchema = z.object({
 });
 
 export type SlimRole = z.infer<typeof SlimRoleSchema>;
+
+export const UpdateChatACLSchema = z.object({
+	user_roles: z.record(z.string(), ChatRoleSchema).optional(),
+	group_roles: z.record(z.string(), ChatRoleSchema).optional(),
+});
+
+export type UpdateChatACL = z.infer<typeof UpdateChatACLSchema>;
 
 export const UserStatusSchema = z.enum(["active", "dormant", "suspended"]);
 

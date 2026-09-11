@@ -27,6 +27,7 @@ var wantedTypes = map[string]bool{
 	"Chat":                     true,
 	"CreateChatMessageRequest": true,
 	"CreateChatRequest":        true,
+	"UpdateChatACL":            true,
 	"Organization":             true,
 	"User":                     true,
 }

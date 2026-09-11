@@ -647,6 +647,12 @@ export class CoderAgentChatAction {
 		const chatUrl = this.generateChatUrl(createdChat.id);
 		core.info(`Chat URL: ${chatUrl}`);
 
+		// Share before polling, so the chat is readable while it runs
+		// rather than only after it finishes.
+		if (this.inputs.shareWithOrganization) {
+			await this.shareWithOrganization(createdChat.id, organizationID);
+		}
+
 		// Poll before commenting so wait=complete posts only after the
 		// chat reaches a terminal state. No mid-poll comment updates.
 		let finalChat = createdChat;
@@ -679,6 +685,39 @@ export class CoderAgentChatAction {
 		}
 
 		return this.buildOutputs(coderUsername, finalChat, true);
+	}
+
+	/**
+	 * Give the chat's organization read access, so anyone in it can open
+	 * the chat this run created. The Everyone group shares its
+	 * organization's ID, so a single group entry covers every member.
+	 *
+	 * Only the create branch calls this. A reused chat was shared by the
+	 * run that created it, and a chat created before this input existed
+	 * stays private on purpose: re-sharing it would be a silent change to
+	 * who can read past work.
+	 *
+	 * A sharing failure never fails the run. The review itself is fine,
+	 * and a deployment with chat sharing disabled answers 403 here.
+	 */
+	private async shareWithOrganization(
+		chatId: ChatId,
+		organizationID: string,
+	): Promise<void> {
+		try {
+			await this.coder.updateChatACL(chatId, {
+				group_roles: { [organizationID]: "read" },
+			});
+			core.info(
+				`Granted read access on the chat to organization ${organizationID}`,
+			);
+		} catch (error) {
+			core.warning(
+				`Could not share the chat with organization ${organizationID}: ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+			);
+		}
 	}
 
 	/**

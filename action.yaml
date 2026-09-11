@@ -67,6 +67,11 @@ inputs:
     required: false
     default: "false"
 
+  share-with-organization:
+    description: "Give the chat's Coder organization read access to a newly created chat, so people other than the `coder-token` holder can open it. Only applies when this run creates the chat; a reused chat keeps whatever access it already had. Read-only, and group access sends no notifications. A deployment with chat sharing disabled logs a warning instead of failing the run."
+    required: false
+    default: "false"
+
 outputs:
   coder-username:
     description: "The Coder username the `coder-token` belongs to (always the chat owner; the chats API has no owner override)."

@@ -19,6 +19,7 @@ const actionInputValid: ActionInputs = {
 	wait: "none",
 	waitTimeoutSeconds: DEFAULT_WAIT_TIMEOUT_SECONDS,
 	forceNewChat: false,
+	shareWithOrganization: false,
 };
 
 describe("ActionInputsSchema", () => {
@@ -94,6 +95,13 @@ describe("ActionInputsSchema", () => {
 				const result = ActionInputsSchema.parse(input);
 				expect(result.coderURL).toBe(url);
 			}
+		});
+
+		test("shareWithOrganization defaults to false when omitted", () => {
+			const { shareWithOrganization, ...withoutShare } = actionInputValid;
+			expect(shareWithOrganization).toBe(false);
+			const result = ActionInputsSchema.parse(withoutShare);
+			expect(result.shareWithOrganization).toBe(false);
 		});
 	});
 

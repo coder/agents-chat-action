@@ -4,16 +4,19 @@ import {
 	ChatSchema,
 	ChatDiffStatusSchema,
 	ChatErrorSchema,
+	ChatRoleSchema,
 	ChatStatusSchema,
 	CreateChatMessageRequestSchema,
 	CreateChatRequestSchema,
 	OrganizationSchema,
+	UpdateChatACLSchema,
 	UserSchema,
 } from "./codersdk.gen";
 import type {
 	CreateChatMessageRequest,
 	CreateChatRequest,
 	Organization,
+	UpdateChatACL,
 	User,
 } from "./codersdk.gen";
 
@@ -31,20 +34,24 @@ export {
 	ChatSchema,
 	ChatDiffStatusSchema,
 	ChatErrorSchema,
+	ChatRoleSchema,
 	ChatStatusSchema,
 	CreateChatMessageRequestSchema,
 	CreateChatRequestSchema,
 	OrganizationSchema,
+	UpdateChatACLSchema,
 	UserSchema,
 };
 export type {
 	Chat,
 	ChatDiffStatus,
 	ChatError,
+	ChatRole,
 	ChatStatus,
 	CreateChatMessageRequest,
 	CreateChatRequest,
 	Organization,
+	UpdateChatACL,
 	User,
 } from "./codersdk.gen";
 
@@ -87,6 +94,14 @@ export interface CoderClient {
 	getChat(chatId: ChatId): Promise<CoderChat>;
 
 	listChats(opts?: ListChatsOptions): Promise<CoderChat[]>;
+
+	/**
+	 * Grant read access on a chat to users or groups via
+	 * `PATCH /api/v2/chats/{chat}/acl`. Every chat is owned by the
+	 * `coder-token` holder, so without an ACL entry nobody else can open
+	 * one. Group entries send no notifications; user entries do.
+	 */
+	updateChatACL(chatId: ChatId, params: UpdateChatACL): Promise<void>;
 }
 
 export interface ListChatsOptions {
@@ -200,6 +215,16 @@ export class RealCoderClient implements CoderClient {
 		const endpoint = `/api/experimental/chats/${encodeURIComponent(chatId)}`;
 		const response = await this.request<unknown>(endpoint);
 		return CoderChatSchema.parse(response);
+	}
+
+	async updateChatACL(chatId: ChatId, params: UpdateChatACL): Promise<void> {
+		// The ACL route is served from /api/v2. The chat routes above still
+		// use the /api/experimental mount, which is the older prefix.
+		const endpoint = `/api/v2/chats/${encodeURIComponent(chatId)}/acl`;
+		await this.request<void>(endpoint, {
+			method: "PATCH",
+			body: JSON.stringify(params),
+		});
 	}
 
 	async listChats(opts?: ListChatsOptions): Promise<CoderChat[]> {

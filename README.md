@@ -73,6 +73,7 @@ The chat runs as whoever the `coder-token` belongs to; that identity is the only
 | `wait-timeout-seconds` | no       | `600`   | Max wait when `wait: complete`. |
 | `idempotency-key`      | no       |         | Optional sharding key on the reuse scope. See [Chat reuse](#chat-reuse). |
 | `force-new-chat`       | no       | `false` | Skip chat-reuse lookup and always create. Mutually exclusive with `existing-chat-id`. |
+| `share-with-organization` | no    | `false` | Give the chat's Coder organization read access to a newly created chat. See [Who can read the chat](#who-can-read-the-chat). |
 
 ## Outputs
 
@@ -111,6 +112,21 @@ There is one Coder identity in play. `POST /api/experimental/chats` binds the ch
 2. First org membership of the token owner. Non-deterministic for multi-org users; the action warns and recommends pinning `coder-organization`.
 
 Either path fails with `chat-error-kind=org_not_found` when the org doesn't exist or the user has no memberships.
+
+### Who can read the chat
+
+Every chat is owned by the `coder-token` holder, usually a bot account. By default nobody else can open it, and the `chat-url` in the issue comment answers "Chat not found" for everyone but that bot. That hides the agent's reasoning from the people reading its output.
+
+Set `share-with-organization: true` to grant the chat's organization read access. The Everyone group shares its organization's ID, so one group entry covers every member of the organization the chat runs in, resolved the same way as [Organization resolution](#organization-resolution) above.
+
+Details worth knowing:
+
+- Read-only. Readers can open the chat and follow it; they cannot send messages.
+- Only on creation. A reused chat keeps the access it already had, so turning the input on does not retroactively open past chats.
+- Applied before the `wait: complete` poll, so a reader can watch a long run rather than only read it afterwards.
+- Group access sends no notifications. Sharing a chat with a named user does.
+- Sub-chats are separate. Coder sets ACLs on root chats only, so a subagent's chat is not covered by the parent's entry.
+- A deployment with chat sharing disabled answers `403` here. The action logs a warning and the run still succeeds, because the chat itself is fine.
 
 ### Chat reuse
 

@@ -36555,6 +36555,7 @@ var ChatInputPartSchema = exports_external.object({
   content: exports_external.string().optional()
 });
 var ChatPlanModeSchema = exports_external.enum(["plan"]);
+var ChatRoleSchema = exports_external.enum(["", "read"]);
 var ChatStatusSchema = exports_external.enum([
   "completed",
   "error",
@@ -36650,6 +36651,10 @@ var SlimRoleSchema = exports_external.object({
   display_name: exports_external.string(),
   organization_id: exports_external.string().optional()
 });
+var UpdateChatACLSchema = exports_external.object({
+  user_roles: exports_external.record(exports_external.string(), ChatRoleSchema).optional(),
+  group_roles: exports_external.record(exports_external.string(), ChatRoleSchema).optional()
+});
 var UserStatusSchema = exports_external.enum(["active", "dormant", "suspended"]);
 var ReducedUserSchema = MinimalUserSchema.extend({
   email: exports_external.string(),
@@ -36744,6 +36749,13 @@ class RealCoderClient {
     const endpoint2 = `/api/experimental/chats/${encodeURIComponent(chatId)}`;
     const response = await this.request(endpoint2);
     return CoderChatSchema.parse(response);
+  }
+  async updateChatACL(chatId, params) {
+    const endpoint2 = `/api/v2/chats/${encodeURIComponent(chatId)}/acl`;
+    await this.request(endpoint2, {
+      method: "PATCH",
+      body: JSON.stringify(params)
+    });
   }
   async listChats(opts) {
     const params = [];
@@ -37374,6 +37386,9 @@ class CoderAgentChatAction {
     info(`Agents chat created successfully (id: ${createdChat.id}, status: ${createdChat.status})`);
     const chatUrl = this.generateChatUrl(createdChat.id);
     info(`Chat URL: ${chatUrl}`);
+    if (this.inputs.shareWithOrganization) {
+      await this.shareWithOrganization(createdChat.id, organizationID);
+    }
     let finalChat = createdChat;
     if (this.inputs.wait === "complete") {
       info(`Waiting for chat to reach terminal status (timeout: ${this.inputs.waitTimeoutSeconds}s)...`);
@@ -37398,6 +37413,16 @@ class CoderAgentChatAction {
       info("Skipping comment on issue (commentOnIssue is false)");
     }
     return this.buildOutputs(coderUsername, finalChat, true);
+  }
+  async shareWithOrganization(chatId, organizationID) {
+    try {
+      await this.coder.updateChatACL(chatId, {
+        group_roles: { [organizationID]: "read" }
+      });
+      info(`Granted read access on the chat to organization ${organizationID}`);
+    } catch (error52) {
+      warning(`Could not share the chat with organization ${organizationID}: ${error52 instanceof Error ? error52.message : String(error52)}`);
+    }
   }
   async runFollowUp(args) {
     const {
@@ -37566,7 +37591,8 @@ var ActionInputsObjectSchema = exports_external.object({
   wait: exports_external.enum(["none", "complete"]).default("none"),
   waitTimeoutSeconds: exports_external.coerce.number().int().positive().default(DEFAULT_WAIT_TIMEOUT_SECONDS),
   idempotencyKey: exports_external.string().min(1).optional(),
-  forceNewChat: exports_external.boolean().default(false)
+  forceNewChat: exports_external.boolean().default(false),
+  shareWithOrganization: exports_external.boolean().default(false)
 });
 var ActionInputsSchema = ActionInputsObjectSchema.refine((data) => !(data.existingChatId !== undefined && data.forceNewChat === true), {
   message: "Cannot set both existing-chat-id and force-new-chat; choose one.",
@@ -37616,7 +37642,8 @@ async function main() {
       wait: getInput("wait") || undefined,
       waitTimeoutSeconds: getInput("wait-timeout-seconds") || undefined,
       idempotencyKey: getInput("idempotency-key") || undefined,
-      forceNewChat: getBooleanInput("force-new-chat")
+      forceNewChat: getBooleanInput("force-new-chat"),
+      shareWithOrganization: getBooleanInput("share-with-organization")
     });
     debug("Inputs validated successfully");
     debug(`Coder URL: ${inputs.coderURL}`);

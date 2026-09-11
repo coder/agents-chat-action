@@ -101,3 +101,6 @@ bun run build
   - `POST /api/experimental/chats/{id}/messages` - Send message
   - `GET /api/experimental/chats/{id}` - Get chat
   - `GET /api/experimental/chats` - List chats
+
+- **Chat sharing**:
+  - `PATCH /api/v2/chats/{id}/acl` - Grant read access to users or groups (used by `share-with-organization`)

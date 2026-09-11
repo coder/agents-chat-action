@@ -137,6 +137,40 @@ describe("CoderClient", () => {
 		});
 	});
 
+	describe("updateChatACL", () => {
+		test("patches the v2 ACL route with the group role", async () => {
+			mockFetch.mockResolvedValue(
+				createMockResponse(undefined, { status: 204 }),
+			);
+			await client.updateChatACL(mockChat.id, {
+				group_roles: { "cc0e8400-e29b-41d4-a716-446655440000": "read" },
+			});
+			expect(mockFetch).toHaveBeenCalledWith(
+				`https://coder.test/api/v2/chats/${mockChat.id}/acl`,
+				expect.objectContaining({
+					method: "PATCH",
+					body: JSON.stringify({
+						group_roles: { "cc0e8400-e29b-41d4-a716-446655440000": "read" },
+					}),
+				}),
+			);
+		});
+
+		test("throws when sharing is disabled for the deployment", async () => {
+			mockFetch.mockResolvedValue(
+				createMockResponse(
+					{ message: "Chat sharing is disabled for this deployment." },
+					{ ok: false, status: 403, statusText: "Forbidden" },
+				),
+			);
+			expect(
+				client.updateChatACL(mockChat.id, {
+					group_roles: { "cc0e8400-e29b-41d4-a716-446655440000": "read" },
+				}),
+			).rejects.toThrow(CoderAPIError);
+		});
+	});
+
 	describe("getAuthenticatedUser", () => {
 		test("returns the user behind the configured token", async () => {
 			mockFetch.mockResolvedValueOnce(createMockResponse(mockUser));

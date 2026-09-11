@@ -22,6 +22,7 @@ async function main() {
 			waitTimeoutSeconds: core.getInput("wait-timeout-seconds") || undefined,
 			idempotencyKey: core.getInput("idempotency-key") || undefined,
 			forceNewChat: core.getBooleanInput("force-new-chat"),
+			shareWithOrganization: core.getBooleanInput("share-with-organization"),
 		});
 
 		core.debug("Inputs validated successfully");

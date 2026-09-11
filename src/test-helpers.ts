@@ -12,6 +12,7 @@ import type {
 	CreateChatMessageRequest,
 	CreateChatMessageResponse,
 	ChatId,
+	UpdateChatACL,
 } from "./coder-client";
 import type { Clock } from "./action";
 import type { ActionInputs } from "./schemas";
@@ -143,6 +144,7 @@ export function createMockInputs(
 		wait: "none",
 		waitTimeoutSeconds: DEFAULT_WAIT_TIMEOUT_SECONDS,
 		forceNewChat: false,
+		shareWithOrganization: false,
 		...overrides,
 	} as ActionInputs;
 }
@@ -161,6 +163,9 @@ export class MockCoderClient implements CoderClient {
 		Promise.resolve([] as CoderChat[]),
 	);
 	public mockGetAuthenticatedUser = mock(() => Promise.resolve(mockUser));
+	public mockUpdateChatACL = mock((_chatId: ChatId, _params: UpdateChatACL) =>
+		Promise.resolve(),
+	);
 
 	async getAuthenticatedUser(): Promise<User> {
 		return this.mockGetAuthenticatedUser();
@@ -187,6 +192,10 @@ export class MockCoderClient implements CoderClient {
 
 	async listChats(opts?: ListChatsOptions): Promise<CoderChat[]> {
 		return this.mockListChats(opts);
+	}
+
+	async updateChatACL(chatId: ChatId, params: UpdateChatACL): Promise<void> {
+		return this.mockUpdateChatACL(chatId, params);
 	}
 }
 
