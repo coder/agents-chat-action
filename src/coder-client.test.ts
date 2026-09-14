@@ -139,7 +139,7 @@ describe("CoderClient", () => {
 	});
 
 	describe("getUser", () => {
-		test("looks a user up by username or ID on the v2 route", async () => {
+		test("looks up a username on the v2 route", async () => {
 			mockFetch.mockResolvedValue(createMockResponse(mockUser));
 			const result = await client.getUser("nick");
 			expect(result.id).toBe(mockUser.id);

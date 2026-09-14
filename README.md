@@ -75,7 +75,7 @@ The chat runs as whoever the `coder-token` belongs to; that identity is the only
 | `force-new-chat`       | no       | `false` | Skip chat-reuse lookup and always create. Mutually exclusive with `existing-chat-id`. |
 | `share-with-organization` | no    | `false` | Give the chat's Coder organization read access to a newly created chat. See [Who can read the chat](#who-can-read-the-chat). |
 | `share-with-groups`    | no       |         | Coder groups, as names or UUIDs, comma or newline separated. Names need a licensed deployment. |
-| `share-with-users`     | no       |         | Coder users, as usernames or UUIDs, comma or newline separated. Each user is notified once per new chat. |
+| `share-with-users`     | no       |         | Coder usernames or UUIDs to grant read access to a new chat, separated by commas or newlines. |
 
 ## Outputs
 
@@ -117,17 +117,17 @@ Either path fails with `chat-error-kind=org_not_found` when the org doesn't exis
 
 ### Who can read the chat
 
-Every chat is owned by the `coder-token` holder, usually a bot account. By default nobody else can open it, and the `chat-url` in the issue comment answers "Chat not found" for everyone but that bot. That hides the agent's reasoning from the people reading its output.
+New chats belong to the `coder-token` holder. These inputs grant additional read access; they do not restrict access already allowed by Coder roles.
 
 Three inputs grant read access on a chat this run creates. They combine, and the action sends them as one request.
 
 ```yaml
     share-with-organization: true    # everyone in the chat's organization
-    share-with-groups: docs, 0f1e... # group names or group UUIDs
+    share-with-groups: docs, platform # group names in the chat's organization
     share-with-users: nickvigilante  # usernames or user UUIDs
 ```
 
-`share-with-organization` needs no lookup: the Everyone group shares its organization's ID, and the organization is the one already resolved for `createChat` (see [Organization resolution](#organization-resolution)). Group names resolve through `GET /api/v2/organizations/{organization}/groups/{groupName}`, which only a licensed deployment serves; a group UUID skips the lookup and works everywhere. Usernames resolve through `GET /api/v2/users/{user}` on any deployment.
+`share-with-organization` grants access to the Everyone group in the selected Coder organization. Pin `coder-organization` if the token owner belongs to multiple organizations. Group names resolve within that organization and require the licensed groups API; group UUIDs skip that lookup but still require chat-sharing support. Usernames resolve through the Coder users API.
 
 Details worth knowing:
 
@@ -137,7 +137,7 @@ Details worth knowing:
 - Groups are quiet, users are not. Coder notifies each user named in `user_roles` once per chat and never notifies group members.
 - The `coder-token` owner is skipped in `share-with-users`. The API rejects a request that changes the caller's own role, and that rejection would drop every other entry in the same request.
 - An entry that does not resolve is skipped with a warning; the rest still share. If nothing resolves, the chat stays private and the run logs a warning.
-- Sub-chats are separate. Coder sets ACLs on root chats only, so a subagent's chat is not covered by the parent's entry.
+- Subagent chats inherit the root chat's ACL. ACLs can be changed only on the root, not independently on a child.
 - A deployment with chat sharing disabled answers `403`. The action logs a warning and the run still succeeds, because the chat itself is fine.
 
 ### Chat reuse

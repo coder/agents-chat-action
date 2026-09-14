@@ -37170,7 +37170,7 @@ async function resolveID(input, value, lookup) {
   try {
     return await lookup();
   } catch (error52) {
-    const hint = input === "share-with-groups" && error52 instanceof CoderAPIError && error52.statusCode === 404 ? " Either the group does not exist, or this deployment is unlicensed and cannot look groups up by name; a group UUID works in both cases." : "";
+    const hint = input === "share-with-groups" && error52 instanceof CoderAPIError && error52.statusCode === 404 ? " Check that the group exists. If this deployment lacks group-name lookup, provide the UUID of an existing group." : "";
     warning(`Could not resolve ${input} entry '${value}': ${describe3(error52)}.${hint}`);
     return;
   }

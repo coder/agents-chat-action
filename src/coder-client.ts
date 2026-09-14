@@ -112,11 +112,8 @@ export interface CoderClient {
 	listChats(opts?: ListChatsOptions): Promise<CoderChat[]>;
 
 	/**
-	 * Grant read access on a chat to users or groups via
-	 * `PATCH /api/v2/chats/{chat}/acl`. Every chat is owned by the
-	 * `coder-token` holder, so without an ACL entry nobody else can open
-	 * one. Keys must be existing UUIDs. Group entries send no
-	 * notifications; user entries do.
+	 * Update a root chat's user and group ACLs. Keys are UUIDs; `read` grants
+	 * access and an empty role removes an entry. Omitted entries are unchanged.
 	 */
 	updateChatACL(chatId: ChatId, params: UpdateChatACL): Promise<void>;
 }

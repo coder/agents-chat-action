@@ -95,7 +95,7 @@ describe("resolveChatShare", () => {
 		});
 	});
 
-	test("user UUIDs pass through and usernames resolve", async () => {
+	test("resolves a username to a user UUID", async () => {
 		coder.mockGetUser.mockResolvedValue({ ...mockUser, id: OTHER_USER_ID });
 		const acl = await resolveChatShare(
 			coder,
@@ -128,7 +128,7 @@ describe("resolveChatShare", () => {
 		);
 		expect(acl).toEqual({ group_roles: { [ORG]: "read" } });
 		expect(warning).toHaveBeenCalledWith(
-			expect.stringContaining("group UUID works in both cases"),
+			expect.stringContaining("provide the UUID of an existing group"),
 		);
 	});
 

@@ -68,16 +68,16 @@ inputs:
     default: "false"
 
   share-with-organization:
-    description: "Give the chat's Coder organization read access to a newly created chat, so people other than the `coder-token` holder can open it. The Everyone group shares its organization's ID, so this needs no group lookup. Only applies when this run creates the chat; a reused chat keeps whatever access it already had. Read-only, and group access sends no notifications. A deployment with chat sharing disabled logs a warning instead of failing the run."
+    description: "Grant the selected Coder organization read access to a new chat. Reused chats keep their existing access. Sharing failures log a warning without failing the action. See the README for sharing scope and limitations."
     required: false
     default: "false"
 
   share-with-groups:
-    description: "Coder groups to give read access to a newly created chat, as names or UUIDs, separated by commas or newlines. Names resolve inside the chat's organization and need a licensed deployment; UUIDs work everywhere. An entry that does not resolve is skipped with a warning. Same creation-only and read-only rules as share-with-organization."
+    description: "Grant Coder groups read access to a new chat. Accepts comma- or newline-separated names or UUIDs. Names resolve in the chat's organization and require the licensed groups API; UUIDs skip this lookup. Failed lookups are skipped with a warning. Reused chats keep their existing access."
     required: false
 
   share-with-users:
-    description: "Coder users to give read access to a newly created chat, as usernames or UUIDs, separated by commas or newlines. Each named user gets one notification per new chat; groups do not. The `coder-token` owner is skipped, since a chat cannot be shared with its own owner. Same creation-only and read-only rules as share-with-organization."
+    description: "Grant Coder users read access to a new chat. Accepts comma- or newline-separated usernames or UUIDs. Reused chats keep their existing access. See the README for notification and failure behavior."
     required: false
 
 outputs:

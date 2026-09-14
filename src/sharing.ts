@@ -53,10 +53,9 @@ export function hasShareTargets(request: ShareRequest): boolean {
 }
 
 /**
- * Turn names into the UUIDs the ACL API requires. Every key the API
- * receives must be an existing UUID, so an entry that fails to resolve is
- * dropped with a warning rather than sent along to fail the whole PATCH.
- * Returns null when nothing is left to share.
+ * Resolve names to UUIDs, skipping failed lookups with a warning. UUID
+ * inputs pass through without an existence check. Returns null when no
+ * recipients remain.
  */
 export async function resolveChatShare(
 	coder: CoderClient,
@@ -84,9 +83,7 @@ export async function resolveChatShare(
 		groupIDs.add(ctx.organizationID);
 	}
 
-	// The owner already reads their own chat, and the API answers 400 to a
-	// request that changes the caller's own role, which would take every
-	// other entry in this PATCH down with it.
+	// The API rejects the entire PATCH if it includes the caller's user ID.
 	if (userIDs.delete(ctx.tokenOwnerID)) {
 		core.info("Skipping the coder-token owner in share-with-users");
 	}
@@ -101,13 +98,9 @@ export async function resolveChatShare(
 }
 
 /**
- * Grant read access on a chat this run just created. Resolution and the
- * PATCH both warn instead of throwing: the chat itself is fine, and a
- * deployment with chat sharing disabled answers 403 here.
- *
- * Only the create path calls this. A reused chat keeps the access it
- * already had, so turning these inputs on does not retroactively open
- * chats created before them.
+ * Attempt to share a newly created chat. Lookup and PATCH failures log
+ * warnings without failing the action. Callers must not use this to
+ * reconcile access on reused chats.
  */
 export async function shareNewChat(
 	coder: CoderClient,
@@ -162,7 +155,7 @@ async function resolveID(
 			input === "share-with-groups" &&
 			error instanceof CoderAPIError &&
 			error.statusCode === 404
-				? " Either the group does not exist, or this deployment is unlicensed and cannot look groups up by name; a group UUID works in both cases."
+				? " Check that the group exists. If this deployment lacks group-name lookup, provide the UUID of an existing group."
 				: "";
 		core.warning(
 			`Could not resolve ${input} entry '${value}': ${describe(error)}.${hint}`,
