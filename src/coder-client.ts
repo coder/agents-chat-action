@@ -4,16 +4,21 @@ import {
 	ChatSchema,
 	ChatDiffStatusSchema,
 	ChatErrorSchema,
+	ChatRoleSchema,
 	ChatStatusSchema,
 	CreateChatMessageRequestSchema,
 	CreateChatRequestSchema,
+	GroupSchema,
 	OrganizationSchema,
+	UpdateChatACLSchema,
 	UserSchema,
 } from "./codersdk.gen";
 import type {
 	CreateChatMessageRequest,
 	CreateChatRequest,
+	Group,
 	Organization,
+	UpdateChatACL,
 	User,
 } from "./codersdk.gen";
 
@@ -31,20 +36,26 @@ export {
 	ChatSchema,
 	ChatDiffStatusSchema,
 	ChatErrorSchema,
+	ChatRoleSchema,
 	ChatStatusSchema,
 	CreateChatMessageRequestSchema,
 	CreateChatRequestSchema,
+	GroupSchema,
 	OrganizationSchema,
+	UpdateChatACLSchema,
 	UserSchema,
 };
 export type {
 	Chat,
 	ChatDiffStatus,
 	ChatError,
+	ChatRole,
 	ChatStatus,
 	CreateChatMessageRequest,
 	CreateChatRequest,
+	Group,
 	Organization,
+	UpdateChatACL,
 	User,
 } from "./codersdk.gen";
 
@@ -77,6 +88,18 @@ export interface CoderClient {
 
 	getOrganizationByName(name: string): Promise<Organization>;
 
+	/**
+	 * Resolve a user by username or UUID via `GET /api/v2/users/{user}`.
+	 */
+	getUser(usernameOrID: string): Promise<User>;
+
+	/**
+	 * Resolve a group by name inside an organization via
+	 * `GET /api/v2/organizations/{organization}/groups/{groupName}`. Served
+	 * by the licensed build only; unlicensed deployments answer 404.
+	 */
+	getGroupByName(organizationID: string, name: string): Promise<Group>;
+
 	createChat(params: CreateChatRequest): Promise<CoderChat>;
 
 	createChatMessage(
@@ -87,6 +110,12 @@ export interface CoderClient {
 	getChat(chatId: ChatId): Promise<CoderChat>;
 
 	listChats(opts?: ListChatsOptions): Promise<CoderChat[]>;
+
+	/**
+	 * Update a root chat's user and group ACLs. Keys are UUIDs; `read` grants
+	 * access and an empty role removes an entry. Omitted entries are unchanged.
+	 */
+	updateChatACL(chatId: ChatId, params: UpdateChatACL): Promise<void>;
 }
 
 export interface ListChatsOptions {
@@ -175,6 +204,28 @@ export class RealCoderClient implements CoderClient {
 		return OrganizationSchema.parse(response);
 	}
 
+	async getUser(usernameOrID: string): Promise<User> {
+		if (!usernameOrID) {
+			throw new CoderAPIError("User cannot be empty", 400);
+		}
+		const endpoint = `/api/v2/users/${encodeURIComponent(usernameOrID)}`;
+		const response = await this.request<unknown>(endpoint);
+		return UserSchema.parse(response);
+	}
+
+	async getGroupByName(organizationID: string, name: string): Promise<Group> {
+		if (!organizationID || !name) {
+			throw new CoderAPIError(
+				"Organization and group name cannot be empty",
+				400,
+			);
+		}
+		// Only the ID is needed, so leave the member list out of the response.
+		const endpoint = `/api/v2/organizations/${encodeURIComponent(organizationID)}/groups/${encodeURIComponent(name)}?exclude_members=true`;
+		const response = await this.request<unknown>(endpoint);
+		return GroupSchema.parse(response);
+	}
+
 	async createChat(params: CreateChatRequest): Promise<CoderChat> {
 		const endpoint = "/api/experimental/chats";
 		const response = await this.request<unknown>(endpoint, {
@@ -200,6 +251,16 @@ export class RealCoderClient implements CoderClient {
 		const endpoint = `/api/experimental/chats/${encodeURIComponent(chatId)}`;
 		const response = await this.request<unknown>(endpoint);
 		return CoderChatSchema.parse(response);
+	}
+
+	async updateChatACL(chatId: ChatId, params: UpdateChatACL): Promise<void> {
+		// The ACL route is served from /api/v2. The chat routes above still
+		// use the /api/experimental mount, which is the older prefix.
+		const endpoint = `/api/v2/chats/${encodeURIComponent(chatId)}/acl`;
+		await this.request<void>(endpoint, {
+			method: "PATCH",
+			body: JSON.stringify(params),
+		});
 	}
 
 	async listChats(opts?: ListChatsOptions): Promise<CoderChat[]> {

@@ -9,6 +9,7 @@ import {
 	mockChat,
 	mockChatMessageResponse,
 	mockOrganization,
+	mockGroup,
 	createMockInputs,
 	createMockResponse,
 } from "./test-helpers";
@@ -134,6 +135,64 @@ describe("CoderClient", () => {
 					}),
 				}),
 			);
+		});
+	});
+
+	describe("getUser", () => {
+		test("looks up a username on the v2 route", async () => {
+			mockFetch.mockResolvedValue(createMockResponse(mockUser));
+			const result = await client.getUser("nick");
+			expect(result.id).toBe(mockUser.id);
+			expect(mockFetch).toHaveBeenCalledWith(
+				"https://coder.test/api/v2/users/nick",
+				expect.anything(),
+			);
+		});
+	});
+
+	describe("getGroupByName", () => {
+		test("looks a group up inside the organization without its members", async () => {
+			mockFetch.mockResolvedValue(createMockResponse(mockGroup));
+			const result = await client.getGroupByName(mockOrganization.id, "docs");
+			expect(result.id).toBe(mockGroup.id);
+			expect(mockFetch).toHaveBeenCalledWith(
+				`https://coder.test/api/v2/organizations/${mockOrganization.id}/groups/docs?exclude_members=true`,
+				expect.anything(),
+			);
+		});
+	});
+
+	describe("updateChatACL", () => {
+		test("patches the v2 ACL route with the group role", async () => {
+			mockFetch.mockResolvedValue(
+				createMockResponse(undefined, { status: 204 }),
+			);
+			await client.updateChatACL(mockChat.id, {
+				group_roles: { "cc0e8400-e29b-41d4-a716-446655440000": "read" },
+			});
+			expect(mockFetch).toHaveBeenCalledWith(
+				`https://coder.test/api/v2/chats/${mockChat.id}/acl`,
+				expect.objectContaining({
+					method: "PATCH",
+					body: JSON.stringify({
+						group_roles: { "cc0e8400-e29b-41d4-a716-446655440000": "read" },
+					}),
+				}),
+			);
+		});
+
+		test("throws when sharing is disabled for the deployment", async () => {
+			mockFetch.mockResolvedValue(
+				createMockResponse(
+					{ message: "Chat sharing is disabled for this deployment." },
+					{ ok: false, status: 403, statusText: "Forbidden" },
+				),
+			);
+			expect(
+				client.updateChatACL(mockChat.id, {
+					group_roles: { "cc0e8400-e29b-41d4-a716-446655440000": "read" },
+				}),
+			).rejects.toThrow(CoderAPIError);
 		});
 	});
 

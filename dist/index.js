@@ -36555,6 +36555,7 @@ var ChatInputPartSchema = exports_external.object({
   content: exports_external.string().optional()
 });
 var ChatPlanModeSchema = exports_external.enum(["plan"]);
+var ChatRoleSchema = exports_external.enum(["", "read"]);
 var ChatStatusSchema = exports_external.enum([
   "completed",
   "error",
@@ -36619,6 +36620,7 @@ var CreateChatRequestSchema = exports_external.object({
   plan_mode: ChatPlanModeSchema.optional(),
   client_type: ChatClientTypeSchema.optional()
 });
+var GroupSourceSchema = exports_external.enum(["oidc", "user"]);
 var LoginTypeSchema = exports_external.enum([
   "github",
   "none",
@@ -36650,6 +36652,10 @@ var SlimRoleSchema = exports_external.object({
   display_name: exports_external.string(),
   organization_id: exports_external.string().optional()
 });
+var UpdateChatACLSchema = exports_external.object({
+  user_roles: exports_external.record(exports_external.string(), ChatRoleSchema).optional(),
+  group_roles: exports_external.record(exports_external.string(), ChatRoleSchema).optional()
+});
 var UserStatusSchema = exports_external.enum(["active", "dormant", "suspended"]);
 var ReducedUserSchema = MinimalUserSchema.extend({
   email: exports_external.string(),
@@ -36660,6 +36666,19 @@ var ReducedUserSchema = MinimalUserSchema.extend({
   login_type: LoginTypeSchema,
   is_service_account: exports_external.boolean().optional(),
   theme_preference: exports_external.string().optional()
+});
+var GroupSchema = exports_external.object({
+  id: exports_external.string(),
+  name: exports_external.string(),
+  display_name: exports_external.string(),
+  organization_id: exports_external.string(),
+  members: exports_external.array(ReducedUserSchema),
+  total_member_count: exports_external.number(),
+  avatar_url: exports_external.string(),
+  quota_allowance: exports_external.number(),
+  source: GroupSourceSchema,
+  organization_name: exports_external.string(),
+  organization_display_name: exports_external.string()
 });
 var UserSchema = ReducedUserSchema.extend({
   organization_ids: exports_external.array(exports_external.string()),
@@ -36724,6 +36743,22 @@ class RealCoderClient {
     const response = await this.request(endpoint2);
     return OrganizationSchema.parse(response);
   }
+  async getUser(usernameOrID) {
+    if (!usernameOrID) {
+      throw new CoderAPIError("User cannot be empty", 400);
+    }
+    const endpoint2 = `/api/v2/users/${encodeURIComponent(usernameOrID)}`;
+    const response = await this.request(endpoint2);
+    return UserSchema.parse(response);
+  }
+  async getGroupByName(organizationID, name) {
+    if (!organizationID || !name) {
+      throw new CoderAPIError("Organization and group name cannot be empty", 400);
+    }
+    const endpoint2 = `/api/v2/organizations/${encodeURIComponent(organizationID)}/groups/${encodeURIComponent(name)}?exclude_members=true`;
+    const response = await this.request(endpoint2);
+    return GroupSchema.parse(response);
+  }
   async createChat(params) {
     const endpoint2 = "/api/experimental/chats";
     const response = await this.request(endpoint2, {
@@ -36744,6 +36779,13 @@ class RealCoderClient {
     const endpoint2 = `/api/experimental/chats/${encodeURIComponent(chatId)}`;
     const response = await this.request(endpoint2);
     return CoderChatSchema.parse(response);
+  }
+  async updateChatACL(chatId, params) {
+    const endpoint2 = `/api/v2/chats/${encodeURIComponent(chatId)}/acl`;
+    await this.request(endpoint2, {
+      method: "PATCH",
+      body: JSON.stringify(params)
+    });
   }
   async listChats(opts) {
     const params = [];
@@ -37064,6 +37106,82 @@ function buildDeploymentAgentsUrl(coderURL) {
   return `${normalizeBaseUrl(coderURL)}/agents`;
 }
 
+// src/sharing.ts
+var UUIDSchema = exports_external.uuid();
+function parseShareList(raw) {
+  if (!raw) {
+    return [];
+  }
+  const values = raw.split(/[,\n]/).map((part) => part.trim()).filter(Boolean);
+  return [...new Set(values)];
+}
+function hasShareTargets(request2) {
+  return request2.organization || request2.groups.length > 0 || request2.users.length > 0;
+}
+async function resolveChatShare(coder, request2, ctx) {
+  const [groupIDs, userIDs] = await Promise.all([
+    resolveAll(request2.groups, (group) => resolveID("share-with-groups", group, async () => {
+      const found = await coder.getGroupByName(ctx.organizationID, group);
+      return found.id;
+    })),
+    resolveAll(request2.users, (user) => resolveID("share-with-users", user, async () => {
+      const found = await coder.getUser(user);
+      return found.id;
+    }))
+  ]);
+  if (request2.organization) {
+    groupIDs.add(ctx.organizationID);
+  }
+  if (userIDs.delete(ctx.tokenOwnerID)) {
+    info("Skipping the coder-token owner in share-with-users");
+  }
+  if (groupIDs.size === 0 && userIDs.size === 0) {
+    return null;
+  }
+  return {
+    ...groupIDs.size > 0 && { group_roles: readRoles(groupIDs) },
+    ...userIDs.size > 0 && { user_roles: readRoles(userIDs) }
+  };
+}
+async function shareNewChat(coder, chatId, request2, ctx) {
+  if (!hasShareTargets(request2)) {
+    return;
+  }
+  const acl = await resolveChatShare(coder, request2, ctx);
+  if (!acl) {
+    warning("No share-with-* entry resolved, so the chat was not shared");
+    return;
+  }
+  try {
+    await coder.updateChatACL(chatId, acl);
+    info(`Granted read access on the chat to ${Object.keys(acl.group_roles ?? {}).length} group(s) and ${Object.keys(acl.user_roles ?? {}).length} user(s)`);
+  } catch (error52) {
+    warning(`Could not share the chat: ${describe3(error52)}`);
+  }
+}
+async function resolveAll(values, resolve) {
+  const ids = await Promise.all(values.map(resolve));
+  return new Set(ids.filter((id) => id !== undefined));
+}
+async function resolveID(input, value, lookup) {
+  if (UUIDSchema.safeParse(value).success) {
+    return value;
+  }
+  try {
+    return await lookup();
+  } catch (error52) {
+    const hint = input === "share-with-groups" && error52 instanceof CoderAPIError && error52.statusCode === 404 ? " Check that the group exists. If this deployment lacks group-name lookup, provide the UUID of an existing group." : "";
+    warning(`Could not resolve ${input} entry '${value}': ${describe3(error52)}.${hint}`);
+    return;
+  }
+}
+function readRoles(ids) {
+  return Object.fromEntries([...ids].map((id) => [id, "read"]));
+}
+function describe3(error52) {
+  return error52 instanceof Error ? error52.message : String(error52);
+}
+
 // src/action.ts
 var defaultClock = {
   now: () => Date.now(),
@@ -37374,6 +37492,11 @@ class CoderAgentChatAction {
     info(`Agents chat created successfully (id: ${createdChat.id}, status: ${createdChat.status})`);
     const chatUrl = this.generateChatUrl(createdChat.id);
     info(`Chat URL: ${chatUrl}`);
+    await shareNewChat(this.coder, createdChat.id, {
+      organization: this.inputs.shareWithOrganization,
+      groups: this.inputs.shareWithGroups,
+      users: this.inputs.shareWithUsers
+    }, { organizationID, tokenOwnerID: tokenOwner.id });
     let finalChat = createdChat;
     if (this.inputs.wait === "complete") {
       info(`Waiting for chat to reach terminal status (timeout: ${this.inputs.waitTimeoutSeconds}s)...`);
@@ -37566,7 +37689,10 @@ var ActionInputsObjectSchema = exports_external.object({
   wait: exports_external.enum(["none", "complete"]).default("none"),
   waitTimeoutSeconds: exports_external.coerce.number().int().positive().default(DEFAULT_WAIT_TIMEOUT_SECONDS),
   idempotencyKey: exports_external.string().min(1).optional(),
-  forceNewChat: exports_external.boolean().default(false)
+  forceNewChat: exports_external.boolean().default(false),
+  shareWithOrganization: exports_external.boolean().default(false),
+  shareWithGroups: exports_external.array(exports_external.string().min(1)).default([]),
+  shareWithUsers: exports_external.array(exports_external.string().min(1)).default([])
 });
 var ActionInputsSchema = ActionInputsObjectSchema.refine((data) => !(data.existingChatId !== undefined && data.forceNewChat === true), {
   message: "Cannot set both existing-chat-id and force-new-chat; choose one.",
@@ -37616,7 +37742,10 @@ async function main() {
       wait: getInput("wait") || undefined,
       waitTimeoutSeconds: getInput("wait-timeout-seconds") || undefined,
       idempotencyKey: getInput("idempotency-key") || undefined,
-      forceNewChat: getBooleanInput("force-new-chat")
+      forceNewChat: getBooleanInput("force-new-chat"),
+      shareWithOrganization: getBooleanInput("share-with-organization"),
+      shareWithGroups: parseShareList(getInput("share-with-groups")),
+      shareWithUsers: parseShareList(getInput("share-with-users"))
     });
     debug("Inputs validated successfully");
     debug(`Coder URL: ${inputs.coderURL}`);

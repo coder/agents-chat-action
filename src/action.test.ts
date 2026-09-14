@@ -2260,6 +2260,99 @@ describe("CoderAgentChatAction", () => {
 		});
 	});
 
+	describe("share-with-organization", () => {
+		test("grants the resolved organization read access on a new chat", async () => {
+			coderClient.mockGetAuthenticatedUser.mockResolvedValue(mockUser);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+
+			const inputs = createMockInputs({
+				coderOrganization: "coder",
+				shareWithOrganization: true,
+			});
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+			);
+
+			await action.run();
+
+			// The Everyone group shares its organization's ID, so the entry
+			// is keyed by the same UUID that createChat received.
+			expect(coderClient.mockUpdateChatACL).toHaveBeenCalledWith(mockChat.id, {
+				group_roles: { [mockOrganization.id]: "read" },
+			});
+		});
+
+		test("shares nothing by default", async () => {
+			coderClient.mockGetAuthenticatedUser.mockResolvedValue(mockUser);
+			coderClient.mockCreateChat.mockResolvedValue(mockChat);
+
+			const inputs = createMockInputs({});
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+			);
+
+			await action.run();
+
+			expect(coderClient.mockUpdateChatACL).not.toHaveBeenCalled();
+		});
+
+		test("does not re-share a reused chat", async () => {
+			coderClient.mockGetAuthenticatedUser.mockResolvedValue(mockUser);
+			coderClient.mockListChats.mockResolvedValue([mockChat]);
+			coderClient.mockCreateChatMessage.mockResolvedValue(
+				mockChatMessageResponse,
+			);
+			coderClient.mockGetChat.mockResolvedValue(mockChat);
+
+			const inputs = createMockInputs({ shareWithOrganization: true });
+			const action = new CoderAgentChatAction(
+				coderClient,
+				octokit as unknown as Octokit,
+				inputs,
+			);
+
+			await action.run();
+
+			expect(coderClient.mockCreateChat).not.toHaveBeenCalled();
+			expect(coderClient.mockUpdateChatACL).not.toHaveBeenCalled();
+		});
+
+		test("warns and still succeeds when sharing fails", async () => {
+			const warning = spyOn(core, "warning").mockImplementation(() => {});
+			try {
+				coderClient.mockGetAuthenticatedUser.mockResolvedValue(mockUser);
+				coderClient.mockCreateChat.mockResolvedValue(mockChat);
+				coderClient.mockUpdateChatACL.mockRejectedValue(
+					new CoderAPIError(
+						"Chat sharing is disabled for this deployment.",
+						403,
+					),
+				);
+
+				const inputs = createMockInputs({ shareWithOrganization: true });
+				const action = new CoderAgentChatAction(
+					coderClient,
+					octokit as unknown as Octokit,
+					inputs,
+				);
+
+				const outputs = await action.run();
+
+				expect(outputs.chatId).toBe(mockChat.id);
+				expect(outputs.chatCreated).toBe(true);
+				expect(warning).toHaveBeenCalledWith(
+					expect.stringContaining("Could not share the chat"),
+				);
+			} finally {
+				warning.mockRestore();
+			}
+		});
+	});
+
 	describe("Chat reuse", () => {
 		test("default: listChats is called with the gh-target scope before creating", async () => {
 			coderClient.mockGetAuthenticatedUser.mockResolvedValue(mockUser);

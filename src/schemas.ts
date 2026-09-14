@@ -23,6 +23,9 @@ const ActionInputsObjectSchema = z.object({
 		.default(DEFAULT_WAIT_TIMEOUT_SECONDS),
 	idempotencyKey: z.string().min(1).optional(),
 	forceNewChat: z.boolean().default(false),
+	shareWithOrganization: z.boolean().default(false),
+	shareWithGroups: z.array(z.string().min(1)).default([]),
+	shareWithUsers: z.array(z.string().min(1)).default([]),
 });
 
 export const ActionInputsSchema = ActionInputsObjectSchema.refine(

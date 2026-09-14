@@ -73,6 +73,9 @@ The chat runs as whoever the `coder-token` belongs to; that identity is the only
 | `wait-timeout-seconds` | no       | `600`   | Max wait when `wait: complete`. |
 | `idempotency-key`      | no       |         | Optional sharding key on the reuse scope. See [Chat reuse](#chat-reuse). |
 | `force-new-chat`       | no       | `false` | Skip chat-reuse lookup and always create. Mutually exclusive with `existing-chat-id`. |
+| `share-with-organization` | no    | `false` | Give the chat's Coder organization read access to a newly created chat. See [Who can read the chat](#who-can-read-the-chat). |
+| `share-with-groups`    | no       |         | Coder groups, as names or UUIDs, comma or newline separated. Names need a licensed deployment. |
+| `share-with-users`     | no       |         | Coder usernames or UUIDs to grant read access to a new chat, separated by commas or newlines. |
 
 ## Outputs
 
@@ -111,6 +114,31 @@ There is one Coder identity in play. `POST /api/experimental/chats` binds the ch
 2. First org membership of the token owner. Non-deterministic for multi-org users; the action warns and recommends pinning `coder-organization`.
 
 Either path fails with `chat-error-kind=org_not_found` when the org doesn't exist or the user has no memberships.
+
+### Who can read the chat
+
+New chats belong to the `coder-token` holder. These inputs grant additional read access; they do not restrict access already allowed by Coder roles.
+
+Three inputs grant read access on a chat this run creates. They combine, and the action sends them as one request.
+
+```yaml
+    share-with-organization: true    # everyone in the chat's organization
+    share-with-groups: docs, platform # group names in the chat's organization
+    share-with-users: nickvigilante  # usernames or user UUIDs
+```
+
+`share-with-organization` grants access to the Everyone group in the selected Coder organization. Pin `coder-organization` if the token owner belongs to multiple organizations. Group names resolve within that organization and require the licensed groups API; group UUIDs skip that lookup but still require chat-sharing support. Usernames resolve through the Coder users API.
+
+Details worth knowing:
+
+- Read-only. Readers can open the chat and follow it; they cannot send messages.
+- Only on creation. A reused chat keeps the access it already had, so turning these inputs on does not retroactively open past chats.
+- Applied before the `wait: complete` poll, so a reader can watch a long run rather than only read it afterwards.
+- Groups are quiet, users are not. Coder notifies each user named in `user_roles` once per chat and never notifies group members.
+- The `coder-token` owner is skipped in `share-with-users`. The API rejects a request that changes the caller's own role, and that rejection would drop every other entry in the same request.
+- An entry that does not resolve is skipped with a warning; the rest still share. If nothing resolves, the chat stays private and the run logs a warning.
+- Subagent chats inherit the root chat's ACL. ACLs can be changed only on the root, not independently on a child.
+- A deployment with chat sharing disabled answers `403`. The action logs a warning and the run still succeeds, because the chat itself is fine.
 
 ### Chat reuse
 

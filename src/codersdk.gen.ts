@@ -93,6 +93,10 @@ export const ChatPlanModeSchema = z.enum(["plan"]);
 
 export type ChatPlanMode = z.infer<typeof ChatPlanModeSchema>;
 
+export const ChatRoleSchema = z.enum(["", "read"]);
+
+export type ChatRole = z.infer<typeof ChatRoleSchema>;
+
 export const ChatStatusSchema = z.enum([
 	"completed",
 	"error",
@@ -174,6 +178,10 @@ export const CreateChatRequestSchema = z.object({
 
 export type CreateChatRequest = z.infer<typeof CreateChatRequestSchema>;
 
+export const GroupSourceSchema = z.enum(["oidc", "user"]);
+
+export type GroupSource = z.infer<typeof GroupSourceSchema>;
+
 export const LoginTypeSchema = z.enum([
 	"github",
 	"none",
@@ -220,6 +228,13 @@ export const SlimRoleSchema = z.object({
 
 export type SlimRole = z.infer<typeof SlimRoleSchema>;
 
+export const UpdateChatACLSchema = z.object({
+	user_roles: z.record(z.string(), ChatRoleSchema).optional(),
+	group_roles: z.record(z.string(), ChatRoleSchema).optional(),
+});
+
+export type UpdateChatACL = z.infer<typeof UpdateChatACLSchema>;
+
 export const UserStatusSchema = z.enum(["active", "dormant", "suspended"]);
 
 export type UserStatus = z.infer<typeof UserStatusSchema>;
@@ -236,6 +251,22 @@ export const ReducedUserSchema = MinimalUserSchema.extend({
 });
 
 export type ReducedUser = z.infer<typeof ReducedUserSchema>;
+
+export const GroupSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	display_name: z.string(),
+	organization_id: z.string(),
+	members: z.array(ReducedUserSchema),
+	total_member_count: z.number(),
+	avatar_url: z.string(),
+	quota_allowance: z.number(),
+	source: GroupSourceSchema,
+	organization_name: z.string(),
+	organization_display_name: z.string(),
+});
+
+export type Group = z.infer<typeof GroupSchema>;
 
 export const UserSchema = ReducedUserSchema.extend({
 	organization_ids: z.array(z.string()),

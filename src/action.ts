@@ -24,6 +24,7 @@ import {
 	upsertCommentByMarker,
 } from "./comment";
 import type { ActionInputs, ActionOutputs, ChatErrorKind } from "./schemas";
+import { shareNewChat } from "./sharing";
 
 export type Octokit = ReturnType<typeof getOctokit>;
 
@@ -646,6 +647,19 @@ export class CoderAgentChatAction {
 
 		const chatUrl = this.generateChatUrl(createdChat.id);
 		core.info(`Chat URL: ${chatUrl}`);
+
+		// Share before polling, so the chat is readable while it runs
+		// rather than only after it finishes.
+		await shareNewChat(
+			this.coder,
+			createdChat.id,
+			{
+				organization: this.inputs.shareWithOrganization,
+				groups: this.inputs.shareWithGroups,
+				users: this.inputs.shareWithUsers,
+			},
+			{ organizationID, tokenOwnerID: tokenOwner.id },
+		);
 
 		// Poll before commenting so wait=complete posts only after the
 		// chat reaches a terminal state. No mid-poll comment updates.

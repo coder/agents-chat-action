@@ -67,6 +67,19 @@ inputs:
     required: false
     default: "false"
 
+  share-with-organization:
+    description: "Grant the selected Coder organization read access to a new chat. Reused chats keep their existing access. Sharing failures log a warning without failing the action. See the README for sharing scope and limitations."
+    required: false
+    default: "false"
+
+  share-with-groups:
+    description: "Grant Coder groups read access to a new chat. Accepts comma- or newline-separated names or UUIDs. Names resolve in the chat's organization and require the licensed groups API; UUIDs skip this lookup. Failed lookups are skipped with a warning. Reused chats keep their existing access."
+    required: false
+
+  share-with-users:
+    description: "Grant Coder users read access to a new chat. Accepts comma- or newline-separated usernames or UUIDs. Reused chats keep their existing access. See the README for notification and failure behavior."
+    required: false
+
 outputs:
   coder-username:
     description: "The Coder username the `coder-token` belongs to (always the chat owner; the chats API has no owner override)."

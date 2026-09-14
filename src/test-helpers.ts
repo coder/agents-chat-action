@@ -7,11 +7,13 @@ import {
 import type {
 	User,
 	CoderChat,
+	Group,
 	Organization,
 	CreateChatRequest,
 	CreateChatMessageRequest,
 	CreateChatMessageResponse,
 	ChatId,
+	UpdateChatACL,
 } from "./coder-client";
 import type { Clock } from "./action";
 import type { ActionInputs } from "./schemas";
@@ -70,6 +72,22 @@ export const mockOrganization: Organization = {
 	created_at: "2026-01-01T00:00:00Z",
 	updated_at: "2026-01-01T00:00:00Z",
 	is_default: true,
+};
+
+// A named group in `mockOrganization`. Members are left out, matching
+// the `exclude_members=true` response the client asks for.
+export const mockGroup: Group = {
+	id: "dd0e8400-e29b-41d4-a716-446655440000",
+	name: "docs",
+	display_name: "Docs",
+	organization_id: mockOrganization.id,
+	members: [],
+	total_member_count: 3,
+	avatar_url: "",
+	quota_allowance: 0,
+	source: "user",
+	organization_name: mockOrganization.name,
+	organization_display_name: mockOrganization.display_name,
 };
 
 export const mockChat: CoderChat = {
@@ -143,6 +161,9 @@ export function createMockInputs(
 		wait: "none",
 		waitTimeoutSeconds: DEFAULT_WAIT_TIMEOUT_SECONDS,
 		forceNewChat: false,
+		shareWithOrganization: false,
+		shareWithGroups: [],
+		shareWithUsers: [],
 		...overrides,
 	} as ActionInputs;
 }
@@ -161,6 +182,15 @@ export class MockCoderClient implements CoderClient {
 		Promise.resolve([] as CoderChat[]),
 	);
 	public mockGetAuthenticatedUser = mock(() => Promise.resolve(mockUser));
+	public mockGetUser = mock((_usernameOrID: string) =>
+		Promise.resolve(mockUser),
+	);
+	public mockGetGroupByName = mock((_organizationID: string, _name: string) =>
+		Promise.resolve(mockGroup),
+	);
+	public mockUpdateChatACL = mock((_chatId: ChatId, _params: UpdateChatACL) =>
+		Promise.resolve(),
+	);
 
 	async getAuthenticatedUser(): Promise<User> {
 		return this.mockGetAuthenticatedUser();
@@ -168,6 +198,14 @@ export class MockCoderClient implements CoderClient {
 
 	async getOrganizationByName(name: string): Promise<Organization> {
 		return this.mockGetOrganizationByName(name);
+	}
+
+	async getUser(usernameOrID: string): Promise<User> {
+		return this.mockGetUser(usernameOrID);
+	}
+
+	async getGroupByName(organizationID: string, name: string): Promise<Group> {
+		return this.mockGetGroupByName(organizationID, name);
 	}
 
 	async createChat(params: CreateChatRequest): Promise<CoderChat> {
@@ -187,6 +225,10 @@ export class MockCoderClient implements CoderClient {
 
 	async listChats(opts?: ListChatsOptions): Promise<CoderChat[]> {
 		return this.mockListChats(opts);
+	}
+
+	async updateChatACL(chatId: ChatId, params: UpdateChatACL): Promise<void> {
+		return this.mockUpdateChatACL(chatId, params);
 	}
 }
 
