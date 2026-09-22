@@ -36760,7 +36760,7 @@ class RealCoderClient {
     return GroupSchema.parse(response);
   }
   async createChat(params) {
-    const endpoint2 = "/api/experimental/chats";
+    const endpoint2 = "/api/v2/chats";
     const response = await this.request(endpoint2, {
       method: "POST",
       body: JSON.stringify(params)
@@ -36768,7 +36768,7 @@ class RealCoderClient {
     return CoderChatSchema.parse(response);
   }
   async createChatMessage(chatId, params) {
-    const endpoint2 = `/api/experimental/chats/${encodeURIComponent(chatId)}/messages`;
+    const endpoint2 = `/api/v2/chats/${encodeURIComponent(chatId)}/messages`;
     const response = await this.request(endpoint2, {
       method: "POST",
       body: JSON.stringify(params)
@@ -36776,7 +36776,7 @@ class RealCoderClient {
     return CreateChatMessageResponseSchema.parse(response);
   }
   async getChat(chatId) {
-    const endpoint2 = `/api/experimental/chats/${encodeURIComponent(chatId)}`;
+    const endpoint2 = `/api/v2/chats/${encodeURIComponent(chatId)}`;
     const response = await this.request(endpoint2);
     return CoderChatSchema.parse(response);
   }
@@ -36799,7 +36799,7 @@ class RealCoderClient {
       params.push(`q=${encodeURIComponent("archived:false")}`);
     }
     const query = params.length ? `?${params.join("&")}` : "";
-    const endpoint2 = `/api/experimental/chats${query}`;
+    const endpoint2 = `/api/v2/chats${query}`;
     const response = await this.request(endpoint2);
     const parsed = CoderChatListResponseSchema.parse(response);
     return parsed;

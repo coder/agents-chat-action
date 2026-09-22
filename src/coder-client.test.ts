@@ -37,7 +37,7 @@ describe("CoderClient", () => {
 				content: [{ type: "text", text: "Test" }],
 			});
 			expect(mockFetch).toHaveBeenCalledWith(
-				"https://coder.test/api/experimental/chats",
+				"https://coder.test/api/v2/chats",
 				expect.anything(),
 			);
 		});
@@ -52,7 +52,7 @@ describe("CoderClient", () => {
 			expect(result.title).toBe(mockChat.title);
 			expect(mockFetch).toHaveBeenNthCalledWith(
 				1,
-				"https://coder.test/api/experimental/chats",
+				"https://coder.test/api/v2/chats",
 				expect.objectContaining({
 					method: "POST",
 					headers: expect.objectContaining({
@@ -98,7 +98,7 @@ describe("CoderClient", () => {
 			});
 			expect(result.queued).toBe(false);
 			expect(mockFetch).toHaveBeenCalledWith(
-				`https://coder.test/api/experimental/chats/${mockChat.id}/messages`,
+				`https://coder.test/api/v2/chats/${mockChat.id}/messages`,
 				expect.objectContaining({
 					method: "POST",
 					body: expect.stringContaining("Follow-up"),
@@ -128,12 +128,44 @@ describe("CoderClient", () => {
 			expect(result.id).toBe(mockChat.id);
 			expect(result.status).toBe(mockChat.status);
 			expect(mockFetch).toHaveBeenCalledWith(
-				`https://coder.test/api/experimental/chats/${mockChat.id}`,
+				`https://coder.test/api/v2/chats/${mockChat.id}`,
 				expect.objectContaining({
 					headers: expect.objectContaining({
 						"Coder-Session-Token": "test-token",
 					}),
 				}),
+			);
+		});
+	});
+
+	describe("listChats", () => {
+		test("lists chats on the v2 route", async () => {
+			mockFetch.mockResolvedValue(createMockResponse([mockChat]));
+			const result = await client.listChats();
+			expect(result).toHaveLength(1);
+			expect(result[0].id).toBe(mockChat.id);
+			expect(mockFetch).toHaveBeenCalledWith(
+				"https://coder.test/api/v2/chats",
+				expect.objectContaining({
+					headers: expect.objectContaining({
+						"Coder-Session-Token": "test-token",
+					}),
+				}),
+			);
+		});
+
+		test("repeats the label param and sends the archived filter", async () => {
+			mockFetch.mockResolvedValue(createMockResponse([]));
+			await client.listChats({
+				label: ["coder-agents-chat-action:true", "gh-target:coder/coder#1"],
+				archived: false,
+			});
+			expect(mockFetch).toHaveBeenCalledWith(
+				"https://coder.test/api/v2/chats" +
+					"?label=coder-agents-chat-action%3Atrue" +
+					"&label=gh-target%3Acoder%2Fcoder%231" +
+					"&q=archived%3Afalse",
+				expect.anything(),
 			);
 		});
 	});
@@ -339,7 +371,7 @@ describe("CoderClient", () => {
 				}
 				expect(caught).toBeInstanceOf(CoderAPIError);
 				expect((caught as CoderAPIError).message).toContain(
-					`/api/experimental/chats/${mockChat.id}`,
+					`/api/v2/chats/${mockChat.id}`,
 				);
 				expect((caught as CoderAPIError).message).toContain(
 					`${DEFAULT_REQUEST_TIMEOUT_MS}ms`,

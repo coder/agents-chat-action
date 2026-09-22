@@ -559,7 +559,7 @@ export class CoderAgentChatAction {
 		core.info(`GitHub repo: ${githubRepo}`);
 		core.info(`GitHub item number: ${githubIssueNumber}`);
 
-		// The chat owner on POST /api/experimental/chats is always the
+		// The chat owner on POST /api/v2/chats is always the
 		// `coder-token` holder; the API has no owner override. The action
 		// fetches users/me once for the org pick and the `coder-username`
 		// output. The resulting username also tells the workflow author

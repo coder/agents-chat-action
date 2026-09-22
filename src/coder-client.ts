@@ -80,7 +80,7 @@ export const CoderChatListResponseSchema = z.array(CoderChatSchema);
 export interface CoderClient {
 	/**
 	 * Resolve the Coder user the configured `coder-token` belongs to via
-	 * `GET /api/v2/users/me`. The chat owner on `POST /api/experimental/chats`
+	 * `GET /api/v2/users/me`. The chat owner on `POST /api/v2/chats`
 	 * is always the token holder (the API has no owner override), so this is
 	 * the Coder identity the chat runs as.
 	 */
@@ -227,7 +227,7 @@ export class RealCoderClient implements CoderClient {
 	}
 
 	async createChat(params: CreateChatRequest): Promise<CoderChat> {
-		const endpoint = "/api/experimental/chats";
+		const endpoint = "/api/v2/chats";
 		const response = await this.request<unknown>(endpoint, {
 			method: "POST",
 			body: JSON.stringify(params),
@@ -239,7 +239,7 @@ export class RealCoderClient implements CoderClient {
 		chatId: ChatId,
 		params: CreateChatMessageRequest,
 	): Promise<CreateChatMessageResponse> {
-		const endpoint = `/api/experimental/chats/${encodeURIComponent(chatId)}/messages`;
+		const endpoint = `/api/v2/chats/${encodeURIComponent(chatId)}/messages`;
 		const response = await this.request<unknown>(endpoint, {
 			method: "POST",
 			body: JSON.stringify(params),
@@ -248,14 +248,12 @@ export class RealCoderClient implements CoderClient {
 	}
 
 	async getChat(chatId: ChatId): Promise<CoderChat> {
-		const endpoint = `/api/experimental/chats/${encodeURIComponent(chatId)}`;
+		const endpoint = `/api/v2/chats/${encodeURIComponent(chatId)}`;
 		const response = await this.request<unknown>(endpoint);
 		return CoderChatSchema.parse(response);
 	}
 
 	async updateChatACL(chatId: ChatId, params: UpdateChatACL): Promise<void> {
-		// The ACL route is served from /api/v2. The chat routes above still
-		// use the /api/experimental mount, which is the older prefix.
 		const endpoint = `/api/v2/chats/${encodeURIComponent(chatId)}/acl`;
 		await this.request<void>(endpoint, {
 			method: "PATCH",
@@ -277,7 +275,7 @@ export class RealCoderClient implements CoderClient {
 			params.push(`q=${encodeURIComponent("archived:false")}`);
 		}
 		const query = params.length ? `?${params.join("&")}` : "";
-		const endpoint = `/api/experimental/chats${query}`;
+		const endpoint = `/api/v2/chats${query}`;
 		const response = await this.request<unknown>(endpoint);
 		const parsed = CoderChatListResponseSchema.parse(response);
 		return parsed;

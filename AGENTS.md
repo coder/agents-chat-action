@@ -4,7 +4,7 @@
 
 **Purpose**: GitHub Action that creates and manages Coder Agents chats for GitHub users with automated issue commenting support.
 
-**Key Difference from create-task-action**: This action targets the Coder Agents Chat API (`/api/experimental/chats`) instead of the Tasks API. Agents purposefully does NOT expose template selection. It either auto-provisions a workspace or uses an existing one.
+**Key Difference from create-task-action**: This action targets the Coder Agents Chat API (`/api/v2/chats`) instead of the Tasks API. Agents purposefully does NOT expose template selection. It either auto-provisions a workspace or uses an existing one.
 
 **Tech Stack**:
 - **Action Runtime**: Node 20 (GHES 3.16 runners reject `using: node24`)
@@ -46,7 +46,7 @@ CoderAgentChatAction.run() (action.ts)
 
 1. **No Template Selection**: Agents auto-chooses workspace infrastructure
 2. **Optional Workspace ID**: Can pin to existing workspace via `workspace-id`
-3. **Chat API**: Uses `/api/experimental/chats` (not Tasks API)
+3. **Chat API**: Uses `/api/v2/chats` (not Tasks API)
 4. **Dependency Injection**: All external dependencies injected for testability
 5. **Schema Validation**: Zod schemas ensure type safety at runtime
 
@@ -97,11 +97,11 @@ bun run build
 
 - **Stable API**:
   - `GET /api/v2/users?q=github_com_user_id:{id}` - User lookup
-- **Experimental API**:
-  - `POST /api/experimental/chats` - Create chat
-  - `POST /api/experimental/chats/{id}/messages` - Send message
-  - `GET /api/experimental/chats/{id}` - Get chat
-  - `GET /api/experimental/chats` - List chats
+- **Chat API**:
+  - `POST /api/v2/chats` - Create chat
+  - `POST /api/v2/chats/{id}/messages` - Send message
+  - `GET /api/v2/chats/{id}` - Get chat
+  - `GET /api/v2/chats` - List chats
 
 - **Chat sharing**:
   - `PATCH /api/v2/chats/{id}/acl` - Grant read access to users or groups (used by the `share-with-*` inputs)

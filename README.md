@@ -106,7 +106,7 @@ PR/diff outputs come from the chat's `diff_status` and are only reliable when th
 
 ### Identity resolution
 
-There is one Coder identity in play. `POST /api/experimental/chats` binds the chat owner to the user the session token belongs to; the API has no owner override. The action calls `GET /api/v2/users/me` once to read the token owner's username and organization memberships, then creates the chat. The `coder-username` output is the token owner.
+There is one Coder identity in play. `POST /api/v2/chats` binds the chat owner to the user the session token belongs to; the API has no owner override. The action calls `GET /api/v2/users/me` once to read the token owner's username and organization memberships, then creates the chat. The `coder-username` output is the token owner.
 
 ### Organization resolution
 
@@ -161,7 +161,7 @@ The `idempotency-key` input is sanitized to fit the platform's label-value regex
 
 ### Wait mode
 
-`wait: complete` polls `GET /api/experimental/chats/{id}` every 5 seconds until the chat reaches `waiting`, `completed`, or `error`, or `wait-timeout-seconds` elapses. The comment (when enabled) is posted only after the terminal status; mid-poll updates are suppressed.
+`wait: complete` polls `GET /api/v2/chats/{id}` every 5 seconds until the chat reaches `waiting`, `completed`, or `error`, or `wait-timeout-seconds` elapses. The comment (when enabled) is posted only after the terminal status; mid-poll updates are suppressed.
 
 ### Comment lifecycle
 
@@ -279,7 +279,7 @@ Branch on the kind without parsing the message:
 
 ### Chat ownership
 
-`POST /api/experimental/chats` binds the chat owner to whoever the session token authenticates as. There is no owner override. Anyone who can read `secrets.CODER_TOKEN` acts as that Coder user end-to-end, including the agent's tool plane (shell, `gh`, `git push`, `coder external-auth`, MCP servers). Treat the token as a high-value secret. If your platform exposes per-user spend caps, template allowlists, tool allowlists, or scoped external_auth grants, use them on the token owner; this action cannot constrain what the agent can do once a chat exists.
+`POST /api/v2/chats` binds the chat owner to whoever the session token authenticates as. There is no owner override. Anyone who can read `secrets.CODER_TOKEN` acts as that Coder user end-to-end, including the agent's tool plane (shell, `gh`, `git push`, `coder external-auth`, MCP servers). Treat the token as a high-value secret. If your platform exposes per-user spend caps, template allowlists, tool allowlists, or scoped external_auth grants, use them on the token owner; this action cannot constrain what the agent can do once a chat exists.
 
 ### Trigger gating
 
